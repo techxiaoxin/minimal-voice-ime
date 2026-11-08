@@ -137,12 +137,9 @@ public final class LocalModelManager {
         return f;
     }
 
-    /** 流式模型地址，留空就用当前档的默认镜像。 */
+    /** 预览模型地址固定跟档位走，不开放修改，界面只留一个地址框。 */
     public static String baseUrl(Context ctx) {
-        String v = Prefs.getString(ctx, Prefs.K_LOCAL_URL, "");
-        if (v == null || v.trim().isEmpty()) return defaultStreamUrl(ctx);
-        v = v.trim();
-        return v.endsWith("/") ? v : v + "/";
+        return defaultStreamUrl(ctx);
     }
 
     /** 终稿模型地址，留空就用当前档的默认镜像。 */
@@ -200,11 +197,9 @@ public final class LocalModelManager {
 
     public static String tierSummary(Context ctx) {
         if (isHq(ctx)) {
-            return "双语流式预览 199MB，whisper small 终稿 364MB，共 " + mb(totalBytes(ctx))
-                    + "MB。中英混说更准，内存和速度都吃一点。";
+            return "中英混说都准，内存和速度吃一点。";
         }
-        return "流式小模型 24MB，SenseVoice 终稿 228MB，共 " + mb(totalBytes(ctx))
-                + "MB。省空间，中文为主。";
+        return "省空间，中文为主，英文会拼错。";
     }
 
     public static String statusText(Context ctx) {

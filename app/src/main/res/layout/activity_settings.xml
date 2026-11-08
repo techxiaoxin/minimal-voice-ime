@@ -386,27 +386,13 @@
                                 android:textColorHint="@color/text_hint"
                                 android:textSize="12sp" />
 
-                            <EditText
-                                android:id="@+id/et_local_url_sv"
-                                android:layout_width="match_parent"
-                                android:layout_height="40dp"
-                                android:layout_marginTop="6dp"
-                                android:background="@drawable/bg_input"
-                                android:importantForAutofill="no"
-                                android:inputType="textUri"
-                                android:paddingStart="10dp"
-                                android:paddingEnd="10dp"
-                                android:singleLine="true"
-                                android:textColor="@color/text_primary"
-                                android:textColorHint="@color/text_hint"
-                                android:textSize="12sp" />
+
 
                             <TextView
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="6dp"
-                                android:lineSpacingExtra="2dp"
-                                android:text="上面是流式预览模型的地址，下面是终稿模型的地址。留空就用预设镜像。换别的模型只要文件名跟这一档一致就能下。重下会跳过已完成的文件。"
+                                android:text="地址可以改成你自己的，文件名要跟这档一致。重下会跳过已完成的文件。"
                                 android:textColor="@color/text_secondary"
                                 android:textSize="11sp" />
 
