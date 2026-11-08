@@ -28,6 +28,7 @@ import com.minivoice.ime.R;
 import com.minivoice.ime.asr.AsrConfig;
 import com.minivoice.ime.asr.AsrEngine;
 import com.minivoice.ime.asr.LocalAsrEngine;
+import com.minivoice.ime.asr.LocalLlmModel;
 import com.minivoice.ime.asr.LocalModelManager;
 import com.minivoice.ime.settings.Prefs;
 import com.minivoice.ime.sync.LanSyncManager;
@@ -57,6 +58,11 @@ public class SettingsActivity extends AppCompatActivity {
     private EditText etFilter;
     private CompoundButton swPreferBt;
     private CompoundButton swPolish;
+    private RadioGroup rgPolishEngine;
+    private RadioButton rbPolishCloud;
+    private RadioButton rbPolishLocal;
+    private TextView tvLlmStatus;
+    private Button btnLlmDownload;
     private TextView tvPeers;
     private LinearLayout llPeers;
     private ImageButton btnEye;
@@ -115,6 +121,17 @@ public class SettingsActivity extends AppCompatActivity {
         etFilter = findViewById(R.id.et_filter);
         swPreferBt = findViewById(R.id.sw_prefer_bt);
         swPolish = findViewById(R.id.sw_polish);
+        rgPolishEngine = findViewById(R.id.rg_polish_engine);
+        rbPolishCloud = findViewById(R.id.rb_polish_cloud);
+        rbPolishLocal = findViewById(R.id.rb_polish_local);
+        tvLlmStatus = findViewById(R.id.tv_llm_status);
+        btnLlmDownload = findViewById(R.id.btn_llm_download);
+        rgPolishEngine.setOnCheckedChangeListener((g, id) -> {
+            Prefs.putString(this, Prefs.K_POLISH_ENGINE, id == R.id.rb_polish_local ? "local" : "cloud");
+            renderPolishEngine();
+        });
+        btnLlmDownload.setOnClickListener(v -> startLlmDownload());
+        renderPolishEngine();
         tvPeers = findViewById(R.id.tv_peers);
         llPeers = findViewById(R.id.ll_peers);
         btnEye = findViewById(R.id.btn_eye);
@@ -466,6 +483,44 @@ public class SettingsActivity extends AppCompatActivity {
         btnEye.setImageResource(keyVisible ? R.drawable.ic_eye_off : R.drawable.ic_eye);
         btnEye.setContentDescription(getString(
                 keyVisible ? R.string.settings_key_hide : R.string.settings_key_show));
+    }
+
+    /** 整理引擎的状态显示：本地没下模型就把按钮亮出来。 */
+    private void renderPolishEngine() {
+        if (rgPolishEngine == null) return;
+        String engine = Prefs.getString(this, Prefs.K_POLISH_ENGINE, "cloud");
+        boolean local = "local".equals(engine);
+        rbPolishLocal.setChecked(local);
+        rbPolishCloud.setChecked(!local);
+        boolean ready = LocalLlmModel.ready(this);
+        tvLlmStatus.setText(LocalLlmModel.statusText(this));
+        btnLlmDownload.setVisibility(ready ? android.view.View.GONE : android.view.View.VISIBLE);
+    }
+
+    private void startLlmDownload() {
+        btnLlmDownload.setEnabled(false);
+        btnLlmDownload.setText(R.string.llm_downloading);
+        LocalLlmModel.download(this, new LocalLlmModel.Listener() {
+            @Override
+            public void onProgress(float progress, long downloaded, long total) {
+                runOnUiThread(() -> tvLlmStatus.setText(String.format(java.util.Locale.CHINA,
+                        "下载中 %.0f%%（%.0fMB / %.0fMB）", progress * 100,
+                        downloaded / 1024f / 1024f, total / 1024f / 1024f)));
+            }
+
+            @Override
+            public void onDone(boolean ok, String message) {
+                runOnUiThread(() -> {
+                    btnLlmDownload.setEnabled(true);
+                    btnLlmDownload.setText(R.string.llm_download);
+                    Toast.makeText(SettingsActivity.this, message, Toast.LENGTH_LONG).show();
+                    if (ok) {
+                        Prefs.putString(SettingsActivity.this, Prefs.K_POLISH_ENGINE, "local");
+                    }
+                    renderPolishEngine();
+                });
+            }
+        });
     }
 
     private void save() {

@@ -33,6 +33,11 @@ public final class Prefs {
     public static final String K_BUILTIN_VER = "builtin_ver";
     /** 语音转完是否再过一遍 AI 整理。 */
     public static final String K_POLISH = "ai_polish";
+    /** AI 整理用哪个引擎：cloud 走百炼，local 走手机里的小模型。 */
+    public static final String K_POLISH_ENGINE = "polish_engine";
+    /** 本地整理模型的下载地址，留空用预设。 */
+    public static final String K_LLM_URL = "llm_url";
+
     /** 本地模型的下载地址，留空就用内置的镜像地址。 */
     public static final String K_SPACE_MODE = "space_mode";
     public static final String SPACE_INSERT = "space";

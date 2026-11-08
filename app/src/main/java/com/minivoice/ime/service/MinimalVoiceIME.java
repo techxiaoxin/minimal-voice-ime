@@ -46,6 +46,8 @@ import com.minivoice.ime.asr.AsrEngine;
 import com.minivoice.ime.asr.BailianAsrEngine;
 import com.minivoice.ime.asr.HttpAsrEngine;
 import com.minivoice.ime.asr.LocalAsrEngine;
+import com.minivoice.ime.asr.LocalLlmModel;
+import com.minivoice.ime.asr.LlmPolisher;
 import com.minivoice.ime.asr.LocalModelManager;
 import com.minivoice.ime.asr.RealtimeAsrEngine;
 import com.minivoice.ime.asr.TermFix;
@@ -769,57 +771,16 @@ public class MinimalVoiceIME extends InputMethodService {
                 InputConnection ic = getCurrentInputConnection();
                 if (ic != null) ic.setComposingText(raw, 1);
 
-                // 本地模式不联网，整理只用本地规则：SenseVoice 带的标点加上词表修正，
-                // 想要大模型那种改写，得切到云端模式
-                if (AsrConfig.PROTOCOL_LOCAL.equals(config.protocol)) {
-                    String base = config.polish ? TextPolisher.polishLocal(raw) : raw;
-                    String done = TermFix.apply(MinimalVoiceIME.this, base);
-                    if (!done.equals(raw) && ic != null) ic.setComposingText(done, 1);
-                    waiting = false;
-                    showBusy(false);
-                    if (ic != null) ic.finishComposingText();
-                    hasComposing = false;
-                    refreshStatus(isSpaceMode() ? getString(R.string.voice_tap_space)
-                            : getString(R.string.voice_tap_send));
-                    flashAccent(false);
-                    lastVoiceDoneAt = SystemClock.uptimeMillis();
-                    flashDone();
+                // 整理引擎按设置走：云端就联网，本地就用手机里的小模型，
+                // 本地模型没下好或者还没下，退回规则清理
+                if (config.polish && startPolish(raw)) {
                     return;
                 }
-
-                if (config.polish) {
-                    // 整理期间保持 waiting，防止用户又按一次录进来
-                    refreshStatus("整理中…");
-                    startPolishProgress();
-                    TextPolisher.polish(MinimalVoiceIME.this, raw, result -> {
-                        waiting = false;
-                        showBusy(false);
-                        InputConnection c2 = getCurrentInputConnection();
-                        if (c2 != null) {
-                            String text2 = TermFix.apply(MinimalVoiceIME.this,
-                                    (result == null || result.isEmpty()) ? raw : result);
-                            c2.setComposingText(text2, 1);
-                            c2.finishComposingText();
-                            hasComposing = false;
-                        }
-                        refreshStatus(isSpaceMode() ? getString(R.string.voice_tap_space)
-                            : getString(R.string.voice_tap_send));
-                        flashAccent(false);
-                        lastVoiceDoneAt = SystemClock.uptimeMillis();
-                        flashDone();
-                    });
-                    return;
-                }
-
-                waiting = false;
-                showBusy(false);
-                if (ic != null) ic.finishComposingText();
-                hasComposing = false;
-                refreshStatus(isSpaceMode() ? getString(R.string.voice_tap_space)
-                        : getString(R.string.voice_tap_send));
-                flashAccent(false);
-                lastVoiceDoneAt = SystemClock.uptimeMillis();
-                flashDone();
+                String plain = config.polish
+                        ? TermFix.apply(MinimalVoiceIME.this, TextPolisher.polishLocal(raw))
+                        : raw;
+                finishWithText(plain);
+                return;
             }
 
             @Override
@@ -1096,6 +1057,50 @@ public class MinimalVoiceIME extends InputMethodService {
         } else {
             v.vibrate(ms);
         }
+    }
+
+    /** 按用户选的引擎整理。异步的返回 true，同步的让它走规则清理。 */
+    private boolean startPolish(String raw) {
+        String engine = Prefs.getString(this, Prefs.K_POLISH_ENGINE, "cloud");
+        if ("local".equals(engine)) {
+            if (!LocalLlmModel.ready(this)) return false;
+            refreshStatus("整理中…");
+            startPolishProgress();
+            final String src = raw;
+            new Thread(() -> {
+                String out = LlmPolisher.polish(MinimalVoiceIME.this, src);
+                final String done = (out == null || out.isEmpty())
+                        ? TermFix.apply(MinimalVoiceIME.this, TextPolisher.polishLocal(src))
+                        : TermFix.apply(MinimalVoiceIME.this, out);
+                main.post(() -> finishWithText(done));
+            }).start();
+            return true;
+        }
+        refreshStatus("整理中…");
+        startPolishProgress();
+        TextPolisher.polish(this, raw, result -> {
+            String done = TermFix.apply(MinimalVoiceIME.this,
+                    (result == null || result.isEmpty()) ? TextPolisher.polishLocal(raw) : result);
+            finishWithText(done);
+        });
+        return true;
+    }
+
+    /** 统一把整理好的文字上屏，收尾动效也在这。 */
+    private void finishWithText(String text) {
+        waiting = false;
+        showBusy(false);
+        InputConnection c = getCurrentInputConnection();
+        if (c != null) {
+            c.setComposingText(text, 1);
+            c.finishComposingText();
+        }
+        hasComposing = false;
+        refreshStatus(isSpaceMode() ? getString(R.string.voice_tap_space)
+                : getString(R.string.voice_tap_send));
+        flashAccent(false);
+        lastVoiceDoneAt = SystemClock.uptimeMillis();
+        flashDone();
     }
 
     public void openSettings() {
