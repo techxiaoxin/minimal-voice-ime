@@ -85,6 +85,7 @@ public class MinimalVoiceIME extends InputMethodService {
     private ProgressBar pbInline;
     /** 点设置键展开的快捷面板，里面是换输入法和进设置两条。 */
     private LinearLayout llQuick;
+    private ImageButton btnQuickMenu;
     private ImageButton btnQuickIme;
     private ImageButton btnQuickSettings;
     /** 当前挂上去的整个键盘根布局，只用来调最小高度，绝不碰它的 LayoutParams。 */
@@ -190,6 +191,7 @@ public class MinimalVoiceIME extends InputMethodService {
         ivModeIcon = root.findViewById(R.id.iv_mode_icon);
         llNumbers = root.findViewById(R.id.ll_numbers);
         llQuick = root.findViewById(R.id.ll_quick);
+        btnQuickMenu = root.findViewById(R.id.btn_quick_menu);
         btnQuickIme = root.findViewById(R.id.btn_quick_ime);
         btnQuickSettings = root.findViewById(R.id.btn_quick_settings);
         flExpand = root.findViewById(R.id.fl_expand);
@@ -208,8 +210,13 @@ public class MinimalVoiceIME extends InputMethodService {
         ivMic.setColorFilter(iconTint);
         ivModeIcon.setColorFilter(iconTint);
         ivExpand.setColorFilter(iconTint);
+        btnQuickMenu.setColorFilter(iconTint);
         btnQuickIme.setColorFilter(iconTint);
         btnQuickSettings.setColorFilter(iconTint);
+        btnQuickMenu.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            hideQuickPanel();
+        });
         btnQuickIme.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
             switchIme();
@@ -537,6 +544,8 @@ public class MinimalVoiceIME extends InputMethodService {
         if (llQuick == null) return;
         numbersOpen = false;
         applyModeState(false);
+        // 面板整条把三横杠那个键也包进来，看起来是一整块，不是飘在旁边的两块
+        if (btnSettings != null) btnSettings.setVisibility(View.INVISIBLE);
         llQuick.setVisibility(View.VISIBLE);
         llQuick.bringToFront();
     }
@@ -545,6 +554,7 @@ public class MinimalVoiceIME extends InputMethodService {
         if (llQuick != null && llQuick.getVisibility() != View.GONE) {
             llQuick.setVisibility(View.GONE);
         }
+        if (btnSettings != null) btnSettings.setVisibility(View.VISIBLE);
     }
 
     /** 切到下一个输入法，切不动就弹系统的输入法选择器。 */

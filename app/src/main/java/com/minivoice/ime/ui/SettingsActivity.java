@@ -493,8 +493,16 @@ public class SettingsActivity extends AppCompatActivity {
         rbPolishLocal.setChecked(local);
         rbPolishCloud.setChecked(!local);
         boolean ready = LocalLlmModel.ready(this);
-        tvLlmStatus.setText(LocalLlmModel.statusText(this));
-        btnLlmDownload.setVisibility(ready ? android.view.View.GONE : android.view.View.VISIBLE);
+        if (local) {
+            tvLlmStatus.setText(LocalLlmModel.statusText(this));
+            btnLlmDownload.setVisibility(android.view.View.VISIBLE);
+            btnLlmDownload.setEnabled(!ready);
+            btnLlmDownload.setText(ready ? R.string.llm_downloaded : R.string.llm_download);
+        } else {
+            // 选云端就不显示下载按钮，也不显示本地的状态，界面干净点
+            tvLlmStatus.setText("");
+            btnLlmDownload.setVisibility(android.view.View.GONE);
+        }
     }
 
     private void startLlmDownload() {

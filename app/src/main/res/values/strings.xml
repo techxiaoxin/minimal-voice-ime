@@ -65,4 +65,5 @@
     <string name="polish_engine_local">本地整理（离线）</string>
     <string name="llm_download">下载整理模型（约410MB）</string>
     <string name="llm_downloading">正在下载…</string>
+    <string name="llm_downloaded">已下载</string>
 </resources>
