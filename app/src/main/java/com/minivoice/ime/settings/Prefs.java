@@ -37,6 +37,11 @@ public final class Prefs {
     public static final String K_POLISH_ENGINE = "polish_engine";
     /** 本地整理模型的下载地址，留空用预设。 */
     public static final String K_LLM_URL = "llm_url";
+    /** 本地整理模型档位：small 0.5B / big 1.5B。 */
+    public static final String K_LLM_TIER = "llm_tier";
+    /** 云端整理累计用量。 */
+    public static final String K_TOKEN_TOTAL = "polish_tokens";
+    public static final String K_TOKEN_QUESTS = "polish_requests";
 
     /** 本地模型的下载地址，留空就用内置的镜像地址。 */
     public static final String K_SPACE_MODE = "space_mode";
@@ -76,6 +81,26 @@ public final class Prefs {
     }
 
     /** 自定义词表：一行一个词，同步时按 JSON 传。 */
+    public static int getInt(Context ctx, String key, int def) {
+        return sp(ctx).getInt(key, def);
+    }
+
+    public static void putInt(Context ctx, String key, int value) {
+        sp(ctx).edit().putInt(key, value).apply();
+    }
+
+    /** 累加一次云端整理用掉的 token，顺便记次数。 */
+    public static void addTokens(Context ctx, int tokens) {
+        int total = getInt(ctx, K_TOKEN_TOTAL, 0) + Math.max(0, tokens);
+        putInt(ctx, K_TOKEN_TOTAL, total);
+        putInt(ctx, K_TOKEN_QUESTS, getInt(ctx, K_TOKEN_QUESTS, 0) + 1);
+    }
+
+    public static void resetTokens(Context ctx) {
+        putInt(ctx, K_TOKEN_TOTAL, 0);
+        putInt(ctx, K_TOKEN_QUESTS, 0);
+    }
+
     public static List<String> getWordList(Context ctx) {
         String raw = getString(ctx, K_VOCAB, "");
         List<String> out = new ArrayList<>();

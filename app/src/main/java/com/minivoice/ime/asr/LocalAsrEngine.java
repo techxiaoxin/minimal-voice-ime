@@ -198,7 +198,8 @@ public class LocalAsrEngine implements AsrEngine {
         OfflineWhisperModelConfig whisper = OfflineWhisperModelConfig.builder()
                 .setEncoder(new File(dir, files[0]).getAbsolutePath())
                 .setDecoder(new File(dir, files[1]).getAbsolutePath())
-                .setLanguage("")
+                // 语言写死中文，auto 猜错的时候会吐繁体，甚至把中文当英文转写
+                .setLanguage("zh")
                 .setTask("transcribe")
                 .setTailPaddings(1000)
                 .build();

@@ -179,6 +179,13 @@ public final class TextPolisher {
                 if (!r.isSuccessful() || r.body() == null) return raw;
                 String s = r.body().string();
                 JsonObject o = JsonParser.parseString(s).getAsJsonObject();
+                // 顺手把这次用掉的 token 记下来，设置页能看到累计用量
+                if (o.has("usage") && o.get("usage").isJsonObject()) {
+                    JsonObject u = o.getAsJsonObject("usage");
+                    if (u.has("total_tokens") && !u.get("total_tokens").isJsonNull()) {
+                        Prefs.addTokens(ctx, u.get("total_tokens").getAsInt());
+                    }
+                }
                 String text = o.getAsJsonArray("choices").get(0).getAsJsonObject()
                         .getAsJsonObject("message").get("content").getAsString();
                 text = sanitize(text, raw);

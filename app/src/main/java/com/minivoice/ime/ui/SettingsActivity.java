@@ -64,6 +64,12 @@ public class SettingsActivity extends AppCompatActivity {
     private TextView tvLlmStatus;
     private Button btnLlmDownload;
     private LinearLayout llModels;
+    private RadioGroup rgLlmTier;
+    private RadioButton rbLlmSmall;
+    private RadioButton rbLlmBig;
+    private LinearLayout llTokens;
+    private TextView tvTokens;
+    private Button btnTokenReset;
     private TextView tvPeers;
     private LinearLayout llPeers;
     private ImageButton btnEye;
@@ -128,6 +134,25 @@ public class SettingsActivity extends AppCompatActivity {
         tvLlmStatus = findViewById(R.id.tv_llm_status);
         btnLlmDownload = findViewById(R.id.btn_llm_download);
         llModels = findViewById(R.id.ll_models);
+        rgLlmTier = findViewById(R.id.rg_llm_tier);
+        rbLlmSmall = findViewById(R.id.rb_llm_small);
+        rbLlmBig = findViewById(R.id.rb_llm_big);
+        llTokens = findViewById(R.id.ll_tokens);
+        tvTokens = findViewById(R.id.tv_tokens);
+        btnTokenReset = findViewById(R.id.btn_token_reset);
+        rgLlmTier.setOnCheckedChangeListener((g, id) -> {
+            Prefs.putString(this, Prefs.K_LLM_TIER,
+                    id == R.id.rb_llm_big ? com.minivoice.ime.asr.LocalLlmModel.TIER_BIG
+                            : com.minivoice.ime.asr.LocalLlmModel.TIER_SMALL);
+            com.minivoice.ime.asr.LocalLlm.release();
+            renderPolishEngine();
+            renderModels();
+        });
+        btnTokenReset.setOnClickListener(v -> {
+            Prefs.resetTokens(this);
+            renderPolishEngine();
+            Toast.makeText(this, "云端用量已清零，从现在重新算", Toast.LENGTH_SHORT).show();
+        });
         rgPolishEngine.setOnCheckedChangeListener((g, id) -> {
             Prefs.putString(this, Prefs.K_POLISH_ENGINE, id == R.id.rb_polish_local ? "local" : "cloud");
             renderPolishEngine();
@@ -491,23 +516,33 @@ public class SettingsActivity extends AppCompatActivity {
                 keyVisible ? R.string.settings_key_hide : R.string.settings_key_show));
     }
 
-    /** 整理引擎的状态显示：本地没下模型就把按钮亮出来。 */
+    /** 整理引擎的状态显示：本地显示档位、模型状态和下载按钮，云端显示累计用量。 */
     private void renderPolishEngine() {
         if (rgPolishEngine == null) return;
         String engine = Prefs.getString(this, Prefs.K_POLISH_ENGINE, "cloud");
         boolean local = "local".equals(engine);
         rbPolishLocal.setChecked(local);
         rbPolishCloud.setChecked(!local);
-        boolean ready = LocalLlmModel.ready(this);
         if (local) {
-            tvLlmStatus.setText(LocalLlmModel.statusText(this));
+            rgLlmTier.setVisibility(android.view.View.VISIBLE);
+            boolean big = com.minivoice.ime.asr.LocalLlmModel.isBig(this);
+            rbLlmBig.setChecked(big);
+            rbLlmSmall.setChecked(!big);
+            boolean ready = com.minivoice.ime.asr.LocalLlmModel.ready(this);
+            tvLlmStatus.setText(com.minivoice.ime.asr.LocalLlmModel.statusText(this));
             btnLlmDownload.setVisibility(android.view.View.VISIBLE);
             btnLlmDownload.setEnabled(true);
             btnLlmDownload.setText(ready ? R.string.llm_test : R.string.llm_download);
+            llTokens.setVisibility(android.view.View.GONE);
         } else {
-            // 选云端就不显示下载按钮，也不显示本地的状态，界面干净点
+            rgLlmTier.setVisibility(android.view.View.GONE);
             tvLlmStatus.setText("");
             btnLlmDownload.setVisibility(android.view.View.GONE);
+            int total = Prefs.getInt(this, Prefs.K_TOKEN_TOTAL, 0);
+            int count = Prefs.getInt(this, Prefs.K_TOKEN_QUESTS, 0);
+            tvTokens.setText(String.format(java.util.Locale.CHINA,
+                    "云端整理已用 %d tokens，共 %d 次", total, count));
+            llTokens.setVisibility(android.view.View.VISIBLE);
         }
     }
 
@@ -530,6 +565,7 @@ public class SettingsActivity extends AppCompatActivity {
                     Toast.makeText(SettingsActivity.this, message, Toast.LENGTH_LONG).show();
                     if (ok) {
                         Prefs.putString(SettingsActivity.this, Prefs.K_POLISH_ENGINE, "local");
+                        com.minivoice.ime.asr.LocalLlm.release();
                     }
                     renderPolishEngine();
                 });
@@ -545,7 +581,8 @@ public class SettingsActivity extends AppCompatActivity {
         tvTest.setText("正在加载模型…");
         final String[] samples = {
                 "嗯那个我今天下午大概三点左右吧去那个福田的 apple 店看一下 iphone 的新机子啊顺便问问 wifi 那个问题",
-                "就是说这个东西呢我觉得还行吧但是它那个 type c 的接口啊好像不太稳当然后那个蓝牙也老是断"
+                "就是说这个东西呢我觉得还行吧但是它那个 type c 的接口啊好像不太稳当然后那个蓝牙也老是断",
+                "呃我跟你讲一下上周那个 project 的情况就是我们本来排的是周四上线但是因为 backend 那边 API 一直没冻结所以拖到了下周一然后 QA 那边测试用例也只跑了一半现在最大的风险是 payment 那个模块的兼容性还有就是说老版本的 Android 用户可能会有问题"
         };
         new Thread(() -> {
             StringBuilder sb = new StringBuilder();
@@ -575,7 +612,10 @@ public class SettingsActivity extends AppCompatActivity {
         boolean hq = LocalModelManager.isHq(this);
         addModelRow("语音预览模型", "zh14m 中英双语", LocalModelManager.dir(this), false);
         addModelRow("语音终稿模型", hq ? "whisper small" : "SenseVoice", LocalModelManager.finalDir(this), false);
-        addModelRow("AI 整理模型", "Qwen2.5-0.5B", LocalLlmModel.dir(this), true);
+        addModelRow("整理小模型", "Qwen2.5-0.5B 409MB",
+                new java.io.File(getFilesDir(), com.minivoice.ime.asr.LocalLlmModel.SMALL_DIR), true);
+        addModelRow("整理大模型", "Qwen2.5-1.5B 718MB",
+                new java.io.File(getFilesDir(), com.minivoice.ime.asr.LocalLlmModel.BIG_DIR), true);
     }
 
     private void addModelRow(String title, String subtitle, java.io.File dir, boolean isLlm) {

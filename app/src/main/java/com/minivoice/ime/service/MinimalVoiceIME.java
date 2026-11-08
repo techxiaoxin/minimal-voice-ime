@@ -51,6 +51,7 @@ import com.minivoice.ime.asr.LlmPolisher;
 import com.minivoice.ime.asr.LocalModelManager;
 import com.minivoice.ime.asr.RealtimeAsrEngine;
 import com.minivoice.ime.asr.TermFix;
+import com.minivoice.ime.asr.TextNormalizer;
 import com.minivoice.ime.asr.TextPolisher;
 import com.minivoice.ime.asr.WsAsrEngine;
 import com.minivoice.ime.audio.AudioRecorder;
@@ -774,7 +775,8 @@ public class MinimalVoiceIME extends InputMethodService {
                     flashAccent(false);
                     return;
                 }
-                final String raw = clean(text);
+                // 本地模型偶尔吐繁体字，这里统一压成简体
+                final String raw = TextNormalizer.toSimplified(clean(text));
 
                 // 流式识别时输入框里已经挂着一段 composing 文本，
                 // 这里先把它替换成完整稿，整理完再替换一次，不会重复上屏。

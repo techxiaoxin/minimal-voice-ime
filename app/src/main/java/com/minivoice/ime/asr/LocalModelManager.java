@@ -32,7 +32,7 @@ public final class LocalModelManager {
     public static final String STREAM_DIR = "sherpa-zh14m";
     /** 终稿模型两档各一个目录，能共存，切档不用重下。 */
     public static final String SV_DIR = "sherpa-sensevoice";
-    public static final String HQ_FINAL_DIR = "sherpa-whisper-small";
+    public static final String HQ_FINAL_DIR = "sherpa-whisper-medium";
 
     /** 预览模型：14M 流式 zipformer，int8，约 24MB，只认中文，英文靠终稿兜。 */
     public static final String[] STREAM_FILES = {
@@ -49,11 +49,8 @@ public final class LocalModelManager {
 
     /** 高精度档才有的终稿模型：whisper small int8，encoder 加 decoder 两个大件。 */
     public static final String[] HQ_FINAL_FILES = {
-            "small-encoder.int8.onnx",
-            "small-decoder.int8.onnx",
-            "small-tokens.txt",
-    };
-    public static final long[] HQ_FINAL_SIZES = {112442483L, 262226114L, 816730L};
+            "medium-encoder.int8.onnx", "medium-decoder.int8.onnx", "medium-tokens.txt"};
+    public static final long[] HQ_FINAL_SIZES = {374196283L, 571059257L, 816730L};
 
     public static final String STREAM_BASE_DEFAULT =
             "https://hf-mirror.com/csukuangfj/sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23/resolve/main/";
@@ -61,7 +58,7 @@ public final class LocalModelManager {
             "https://hf-mirror.com/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/";
 
     public static final String HQ_FINAL_BASE_DEFAULT =
-            "https://hf-mirror.com/csukuangfj/sherpa-onnx-whisper-small/resolve/main/";
+            "https://hf-mirror.com/csukuangfj/sherpa-onnx-whisper-medium/resolve/main/";
 
     public interface Listener {
         void onFile(int index, int total, String name);

@@ -18,17 +18,28 @@ public final class LlmPolisher {
                     + "\n3. 把口语改成书面表达，语序理顺，该断句就断句，绝对不要照抄原文。"
                     + "\n4. 中英混杂的名词按常见写法输出，比如 iPhone、WiFi、Type-C、Pro，不要翻译成中文，也不要改成别的词。"
                     + "\n5. 明显的同音错字按上下文改对，人名、地名、专业词不乱改。"
-                    + "\n6. 意思和语气不能变，不要扩写，不要加评论和总结。";
+                    + "\n6. 意思和语气不能变，不要扩写，不要加评论和总结。"
+                    + "\n7. 原文里说到的每件事、每个信息点都要留下，不能因为嫌啰嗦就把内容砍掉。"
+                    + "\n8. 整理后的长度应该跟原文差不多，最多只能短一成左右，明显变短就说明你删多了，这是不允许的。"
+                    + "\n9. 宁可保留一点口语痕迹，也不许把意思压没。";
 
     private static volatile boolean tried = false;
+    private static volatile String loadedPath = null;
 
     private LlmPolisher() {
     }
 
     /** 模型在就返回 true，顺便把它加载起来。 */
     public static boolean ensureLoaded(Context ctx) {
-        if (LocalLlm.load(file(ctx).getAbsolutePath())) {
+        String path = file(ctx).getAbsolutePath();
+        if (loadedPath != null && !loadedPath.equals(path)) {
+            // 用户换档位了，把旧的卸掉再加载新的
+            LocalLlm.release();
+            loadedPath = null;
+        }
+        if (LocalLlm.load(path)) {
             tried = true;
+            loadedPath = path;
             return true;
         }
         return false;
