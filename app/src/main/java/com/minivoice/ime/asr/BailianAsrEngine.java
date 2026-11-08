@@ -36,6 +36,7 @@ public class BailianAsrEngine implements AsrEngine {
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 
     private final AsrConfig config;
+    private android.content.Context appCtx;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
     private final OkHttpClient client = new OkHttpClient.Builder()
@@ -54,6 +55,11 @@ public class BailianAsrEngine implements AsrEngine {
 
     public BailianAsrEngine(AsrConfig config) {
         this.config = config;
+    }
+
+    public BailianAsrEngine(AsrConfig config, android.content.Context ctx) {
+        this.config = config;
+        this.appCtx = ctx == null ? null : ctx.getApplicationContext();
     }
 
     @Override
@@ -179,6 +185,13 @@ public class BailianAsrEngine implements AsrEngine {
     private String contentOf(String json) {
         try {
             JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+            // 云端识别也烧 token，能拿到就记一笔
+            if (appCtx != null && root.has("usage") && root.get("usage").isJsonObject()) {
+                JsonObject u = root.getAsJsonObject("usage");
+                if (u.has("total_tokens") && !u.get("total_tokens").isJsonNull()) {
+                    com.minivoice.ime.settings.Prefs.addTokens(appCtx, u.get("total_tokens").getAsInt());
+                }
+            }
             JsonObject output = root.has("output") ? root.getAsJsonObject("output") : null;
             if (output != null && output.has("text")) {
                 return output.get("text").getAsString().trim();

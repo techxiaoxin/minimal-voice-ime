@@ -38,6 +38,7 @@ public class RealtimeAsrEngine implements AsrEngine {
     private static final long FINISH_TIMEOUT_MS = 12000L;
 
     private final AsrConfig config;
+    private android.content.Context appCtx;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final OkHttpClient client = new OkHttpClient.Builder()
             .connectTimeout(12, TimeUnit.SECONDS)
@@ -65,6 +66,11 @@ public class RealtimeAsrEngine implements AsrEngine {
 
     public RealtimeAsrEngine(AsrConfig config) {
         this.config = config;
+    }
+
+    public RealtimeAsrEngine(AsrConfig config, android.content.Context ctx) {
+        this.config = config;
+        this.appCtx = ctx == null ? null : ctx.getApplicationContext();
     }
 
     @Override
@@ -198,6 +204,15 @@ public class RealtimeAsrEngine implements AsrEngine {
         socket.send(o.toString());
     }
 
+    /** 流式返回里带 usage 就累加，设置页的云端用量才不会一直停在 0。 */
+    private void recordUsage(JsonObject j) {
+        if (appCtx == null || !j.has("usage") || !j.get("usage").isJsonObject()) return;
+        JsonObject u = j.getAsJsonObject("usage");
+        if (u.has("total_tokens") && !u.get("total_tokens").isJsonNull()) {
+            com.minivoice.ime.settings.Prefs.addTokens(appCtx, u.get("total_tokens").getAsInt());
+        }
+    }
+
     private void sendJson(String json) {
         if (socket == null) return;
         socket.send(json);
@@ -293,6 +308,7 @@ public class RealtimeAsrEngine implements AsrEngine {
                 }
                 if ("conversation.item.input_audio_transcription.completed".equals(type)) {
                     String transcript = j.has("transcript") ? j.get("transcript").getAsString() : "";
+                    recordUsage(j);
                     gotFinal = true;
                     clearFinishTimeout();
                     if (TextUtils.isEmpty(transcript)) {

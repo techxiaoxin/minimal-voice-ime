@@ -918,7 +918,7 @@ public class MinimalVoiceIME extends InputMethodService {
         }
         if (AsrConfig.PROTOCOL_BAILIAN.equals(config.protocol)) {
             // 优先走流式，边说边出字；连不上会自动退回整段上传
-            return new RealtimeAsrEngine(config);
+            return new RealtimeAsrEngine(config, this);
         }
         if (AsrConfig.PROTOCOL_WS.equals(config.protocol)) {
             return new WsAsrEngine(config);

@@ -283,10 +283,27 @@ public class SettingsActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        // 回到设置页先刷一次用量，识别和整理每次记账后这里都能看到新数字
+        renderTokens();
         String name = TextUtils.isEmpty(etDevice.getText())
                 ? android.os.Build.MODEL
                 : etDevice.getText().toString();
         lan.startAdvertising(this, name);
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        android.content.SharedPreferences sp = getSharedPreferences("minivoice_prefs", MODE_PRIVATE);
+        sp.registerOnSharedPreferenceChangeListener(tokenWatcher);
+        renderTokens();
+    }
+
+    @Override
+    protected void onStop() {
+        getSharedPreferences("minivoice_prefs", MODE_PRIVATE)
+                .unregisterOnSharedPreferenceChangeListener(tokenWatcher);
+        super.onStop();
     }
 
     @Override
@@ -344,7 +361,16 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     /** 云端用量只在用到云端的时候露出来，本地纯离线就不用看了。 */
+    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener tokenWatcher =
+            (sp, key) -> {
+                if (Prefs.K_TOKEN_TOTAL.equals(key) || Prefs.K_TOKEN_QUESTS.equals(key)
+                        || Prefs.K_PROTOCOL.equals(key) || Prefs.K_POLISH_ENGINE.equals(key)) {
+                    runOnUiThread(this::renderTokens);
+                }
+            };
+
     private void renderTokens() {
+        if (tvTokens == null) return;
         boolean cloudAsr = !com.minivoice.ime.asr.AsrConfig.PROTOCOL_LOCAL.equals(
                 Prefs.getString(this, Prefs.K_PROTOCOL, com.minivoice.ime.asr.AsrConfig.PROTOCOL_BAILIAN));
         boolean cloudPolish = !"local".equals(Prefs.getString(this, Prefs.K_POLISH_ENGINE, "cloud"));
