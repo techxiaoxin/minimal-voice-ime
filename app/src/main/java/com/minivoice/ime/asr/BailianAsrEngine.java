@@ -189,7 +189,7 @@ public class BailianAsrEngine implements AsrEngine {
             if (appCtx != null && root.has("usage") && root.get("usage").isJsonObject()) {
                 JsonObject u = root.getAsJsonObject("usage");
                 if (u.has("total_tokens") && !u.get("total_tokens").isJsonNull()) {
-                    com.minivoice.ime.settings.Prefs.addTokens(appCtx, u.get("total_tokens").getAsInt());
+                    com.minivoice.ime.settings.Prefs.addTokens(appCtx, u.get("total_tokens").getAsInt(), "识别");
                 }
             }
             JsonObject output = root.has("output") ? root.getAsJsonObject("output") : null;

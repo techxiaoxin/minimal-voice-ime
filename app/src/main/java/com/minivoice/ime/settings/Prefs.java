@@ -90,10 +90,32 @@ public final class Prefs {
     }
 
     /** 累加一次云端整理用掉的 token，顺便记次数。 */
+    public static final String K_TOKEN_LOG = "token_log";
+
     public static void addTokens(Context ctx, int tokens) {
-        int total = getInt(ctx, K_TOKEN_TOTAL, 0) + Math.max(0, tokens);
-        putInt(ctx, K_TOKEN_TOTAL, total);
+        addTokens(ctx, tokens, "其他");
+    }
+
+    /** 记一笔用量，顺手把明细也留下，设置页点「明细」能看最近几十条。 */
+    public static void addTokens(Context ctx, int tokens, String kind) {
+        int n = Math.max(0, tokens);
+        putInt(ctx, K_TOKEN_TOTAL, getInt(ctx, K_TOKEN_TOTAL, 0) + n);
         putInt(ctx, K_TOKEN_QUESTS, getInt(ctx, K_TOKEN_QUESTS, 0) + 1);
+        String line = System.currentTimeMillis() + "|" + kind + "|" + n;
+        String old = getString(ctx, K_TOKEN_LOG, "");
+        String all = old.isEmpty() ? line : line + "\n" + old;
+        String[] parts = all.split("\n");
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < parts.length && i < 60; i++) {
+            if (parts[i].trim().isEmpty()) continue;
+            if (sb.length() > 0) sb.append("\n");
+            sb.append(parts[i].trim());
+        }
+        putString(ctx, K_TOKEN_LOG, sb.toString());
+    }
+
+    public static void resetLog(Context ctx) {
+        putString(ctx, K_TOKEN_LOG, "");
     }
 
     public static void resetTokens(Context ctx) {

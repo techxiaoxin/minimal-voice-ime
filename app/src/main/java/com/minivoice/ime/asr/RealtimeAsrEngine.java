@@ -209,7 +209,7 @@ public class RealtimeAsrEngine implements AsrEngine {
         if (appCtx == null || !j.has("usage") || !j.get("usage").isJsonObject()) return;
         JsonObject u = j.getAsJsonObject("usage");
         if (u.has("total_tokens") && !u.get("total_tokens").isJsonNull()) {
-            com.minivoice.ime.settings.Prefs.addTokens(appCtx, u.get("total_tokens").getAsInt());
+            com.minivoice.ime.settings.Prefs.addTokens(appCtx, u.get("total_tokens").getAsInt(), "识别");
         }
     }
 

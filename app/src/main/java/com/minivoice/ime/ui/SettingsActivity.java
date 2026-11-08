@@ -70,6 +70,7 @@ public class SettingsActivity extends AppCompatActivity {
     private LinearLayout llTokens;
     private TextView tvTokens;
     private Button btnTokenReset;
+    private Button btnTokenLog;
     private TextView tvPeers;
     private LinearLayout llPeers;
     private ImageButton btnEye;
@@ -140,6 +141,8 @@ public class SettingsActivity extends AppCompatActivity {
         llTokens = findViewById(R.id.ll_tokens);
         tvTokens = findViewById(R.id.tv_tokens);
         btnTokenReset = findViewById(R.id.btn_token_reset);
+        btnTokenLog = findViewById(R.id.btn_token_log);
+        btnTokenLog.setOnClickListener(v -> showTokenLog());
         rgLlmTier.setOnCheckedChangeListener((g, id) -> {
             Prefs.putString(this, Prefs.K_LLM_TIER,
                     id == R.id.rb_llm_big ? com.minivoice.ime.asr.LocalLlmModel.TIER_BIG
@@ -150,6 +153,7 @@ public class SettingsActivity extends AppCompatActivity {
         });
         btnTokenReset.setOnClickListener(v -> {
             Prefs.resetTokens(this);
+            Prefs.resetLog(this);
             renderPolishEngine();
             Toast.makeText(this, "云端用量已清零，从现在重新算", Toast.LENGTH_SHORT).show();
         });
@@ -380,6 +384,117 @@ public class SettingsActivity extends AppCompatActivity {
                 "云端用量 %s tokens，共 %d 次", formatCount(total), count));
         llTokens.setVisibility(cloudAsr || cloudPolish
                 ? android.view.View.VISIBLE : android.view.View.GONE);
+    }
+
+    /** 点「明细」弹一块半屏小窗，列最近几次都花在哪了。 */
+    private void showTokenLog() {
+        String raw = Prefs.getString(this, Prefs.K_TOKEN_LOG, "");
+        int total = Prefs.getInt(this, Prefs.K_TOKEN_TOTAL, 0);
+        int count = Prefs.getInt(this, Prefs.K_TOKEN_QUESTS, 0);
+
+        int asrSum = 0;
+        int polishSum = 0;
+        java.util.List<String[]> rows = new java.util.ArrayList<>();
+        java.text.SimpleDateFormat fmt =
+                new java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.CHINA);
+        for (String line : raw.split("\n")) {
+            line = line.trim();
+            int i1 = line.indexOf('|');
+            if (i1 < 0) continue;
+            int i2 = line.indexOf('|', i1 + 1);
+            if (i2 < 0) continue;
+            long ts;
+            int tokens;
+            try {
+                ts = Long.parseLong(line.substring(0, i1));
+                tokens = Integer.parseInt(line.substring(i2 + 1));
+            } catch (Exception e) {
+                continue;
+            }
+            String kind = line.substring(i1 + 1, i2);
+            if ("识别".equals(kind)) asrSum += tokens;
+            else if ("整理".equals(kind)) polishSum += tokens;
+            rows.add(new String[]{fmt.format(new java.util.Date(ts)), kind,
+                    formatCount(tokens) + " tokens"});
+        }
+
+        android.widget.LinearLayout box = new android.widget.LinearLayout(this);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int pad = (int) (getResources().getDisplayMetrics().density * 18);
+        box.setPadding(pad, pad, pad, pad);
+
+        android.widget.TextView head = new android.widget.TextView(this);
+        head.setText("最近消耗明细");
+        head.setTextSize(16);
+        head.setTextColor(getResources().getColor(R.color.text_primary, getTheme()));
+        box.addView(head);
+
+        android.widget.TextView sum = new android.widget.TextView(this);
+        sum.setText("识别 " + formatCount(asrSum) + "，整理 " + formatCount(polishSum)
+                + "\n合计 " + formatCount(total) + " tokens，共 " + count + " 次");
+        sum.setTextSize(12);
+        sum.setTextColor(getResources().getColor(R.color.text_secondary, getTheme()));
+        sum.setPadding(0, pad / 3, 0, pad / 2);
+        box.addView(sum);
+
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        android.widget.LinearLayout list = new android.widget.LinearLayout(this);
+        list.setOrientation(android.widget.LinearLayout.VERTICAL);
+        sv.addView(list);
+
+        if (rows.isEmpty()) {
+            android.widget.TextView empty = new android.widget.TextView(this);
+            empty.setText("还没有消耗记录，去说两句话再来");
+            empty.setTextSize(13);
+            empty.setTextColor(getResources().getColor(R.color.text_secondary, getTheme()));
+            empty.setPadding(0, pad, 0, 0);
+            list.addView(empty);
+        } else {
+            int show = Math.min(rows.size(), 8);
+            for (int i = 0; i < show; i++) {
+                android.widget.LinearLayout row = new android.widget.LinearLayout(this);
+                row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+                row.setPadding(0, pad / 2, 0, pad / 2);
+                android.widget.TextView t1 = new android.widget.TextView(this);
+                t1.setText(rows.get(i)[0]);
+                t1.setTextSize(12);
+                t1.setTextColor(getResources().getColor(R.color.text_secondary, getTheme()));
+                t1.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0,
+                        android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+                android.widget.TextView t2 = new android.widget.TextView(this);
+                t2.setText(rows.get(i)[1]);
+                t2.setTextSize(12);
+                t2.setTextColor(getResources().getColor(R.color.text_primary, getTheme()));
+                t2.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0,
+                        android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 0.7f));
+                android.widget.TextView t3 = new android.widget.TextView(this);
+                t3.setText(rows.get(i)[2]);
+                t3.setTextSize(12);
+                t3.setTextColor(getResources().getColor(R.color.text_primary, getTheme()));
+                t3.setGravity(android.view.Gravity.END);
+                t3.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0,
+                        android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1.1f));
+                row.addView(t1);
+                row.addView(t2);
+                row.addView(t3);
+                list.addView(row);
+            }
+        }
+        box.addView(sv, new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        android.app.Dialog d = new android.app.Dialog(this);
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(getResources().getColor(R.color.card_bg, getTheme()));
+        bg.setCornerRadius(getResources().getDisplayMetrics().density * 16);
+        d.getWindow().setBackgroundDrawable(bg);
+        d.setContentView(box);
+        d.setCanceledOnTouchOutside(true);
+        android.view.Window w = d.getWindow();
+        w.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.88),
+                (int) (getResources().getDisplayMetrics().heightPixels * 0.6));
+        w.setGravity(android.view.Gravity.CENTER);
+        d.show();
     }
 
     /** 把规格、说明文字、地址框的提示都刷成当前档的样子。 */

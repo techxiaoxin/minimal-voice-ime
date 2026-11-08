@@ -183,7 +183,7 @@ public final class TextPolisher {
                 if (o.has("usage") && o.get("usage").isJsonObject()) {
                     JsonObject u = o.getAsJsonObject("usage");
                     if (u.has("total_tokens") && !u.get("total_tokens").isJsonNull()) {
-                        Prefs.addTokens(ctx, u.get("total_tokens").getAsInt());
+                        Prefs.addTokens(ctx, u.get("total_tokens").getAsInt(), "整理");
                     }
                 }
                 String text = o.getAsJsonArray("choices").get(0).getAsJsonObject()
