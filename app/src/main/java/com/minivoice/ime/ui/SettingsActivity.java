@@ -63,6 +63,7 @@ public class SettingsActivity extends AppCompatActivity {
     private RadioButton rbPolishLocal;
     private TextView tvLlmStatus;
     private Button btnLlmDownload;
+    private LinearLayout llModels;
     private TextView tvPeers;
     private LinearLayout llPeers;
     private ImageButton btnEye;
@@ -126,11 +127,16 @@ public class SettingsActivity extends AppCompatActivity {
         rbPolishLocal = findViewById(R.id.rb_polish_local);
         tvLlmStatus = findViewById(R.id.tv_llm_status);
         btnLlmDownload = findViewById(R.id.btn_llm_download);
+        llModels = findViewById(R.id.ll_models);
         rgPolishEngine.setOnCheckedChangeListener((g, id) -> {
             Prefs.putString(this, Prefs.K_POLISH_ENGINE, id == R.id.rb_polish_local ? "local" : "cloud");
             renderPolishEngine();
+        renderModels();
         });
-        btnLlmDownload.setOnClickListener(v -> startLlmDownload());
+        btnLlmDownload.setOnClickListener(v -> {
+            if (LocalLlmModel.ready(this)) runLlmTest();
+            else startLlmDownload();
+        });
         renderPolishEngine();
         tvPeers = findViewById(R.id.tv_peers);
         llPeers = findViewById(R.id.ll_peers);
@@ -496,8 +502,8 @@ public class SettingsActivity extends AppCompatActivity {
         if (local) {
             tvLlmStatus.setText(LocalLlmModel.statusText(this));
             btnLlmDownload.setVisibility(android.view.View.VISIBLE);
-            btnLlmDownload.setEnabled(!ready);
-            btnLlmDownload.setText(ready ? R.string.llm_downloaded : R.string.llm_download);
+            btnLlmDownload.setEnabled(true);
+            btnLlmDownload.setText(ready ? R.string.llm_test : R.string.llm_download);
         } else {
             // 选云端就不显示下载按钮，也不显示本地的状态，界面干净点
             tvLlmStatus.setText("");
@@ -529,6 +535,114 @@ public class SettingsActivity extends AppCompatActivity {
                 });
             }
         });
+    }
+
+    /** 拿两句话喂给本地模型，看看它整理成什么样，顺带报个耗时。 */
+    private void runLlmTest() {
+        btnLlmDownload.setEnabled(false);
+        btnLlmDownload.setText(R.string.llm_testing);
+        tvTest.setVisibility(android.view.View.VISIBLE);
+        tvTest.setText("正在加载模型…");
+        final String sample = "嗯那个我想问一下就是这个功能大概什么时候能上线呢我这边还等着用";
+        new Thread(() -> {
+            long t0 = android.os.SystemClock.uptimeMillis();
+            String out = com.minivoice.ime.asr.LlmPolisher.polish(SettingsActivity.this, sample);
+            long cost = android.os.SystemClock.uptimeMillis() - t0;
+            runOnUiThread(() -> {
+                btnLlmDownload.setEnabled(true);
+                btnLlmDownload.setText(R.string.llm_test);
+                tvTest.setVisibility(android.view.View.VISIBLE);
+                if (out == null || out.isEmpty()) {
+                    tvTest.setText("模型没给出结果，可能是内存不够或者模型文件有问题");
+                } else {
+                    tvTest.setText("原文：" + sample + "\n整理：" + out
+                            + String.format(java.util.Locale.CHINA, "\n耗时 %.1f 秒", cost / 1000f));
+                }
+            });
+        }).start();
+    }
+
+    /** 已下载的模型列表：名字、体积、删除。 */
+    private void renderModels() {
+        if (llModels == null) return;
+        llModels.removeAllViews();
+        boolean hq = LocalModelManager.isHq(this);
+        addModelRow("语音预览模型", "zh14m 中英双语", LocalModelManager.dir(this), false);
+        addModelRow("语音终稿模型", hq ? "whisper small" : "SenseVoice", LocalModelManager.finalDir(this), false);
+        addModelRow("AI 整理模型", "Qwen2.5-0.5B", LocalLlmModel.dir(this), true);
+    }
+
+    private void addModelRow(String title, String subtitle, java.io.File dir, boolean isLlm) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(6), 0, dp(6));
+
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1);
+        texts.setLayoutParams(tp);
+
+        TextView name = new TextView(this);
+        name.setText(title + "（" + subtitle + "）");
+        name.setTextColor(getColor(com.minivoice.ime.R.color.text_primary));
+        name.setTextSize(13);
+        texts.addView(name);
+
+        long size = sizeOf(dir);
+        TextView info = new TextView(this);
+        info.setText(size <= 0 ? "未下载" : String.format(java.util.Locale.CHINA, "%.0fMB", size / 1024f / 1024f));
+        info.setTextColor(getColor(com.minivoice.ime.R.color.text_secondary));
+        info.setTextSize(11);
+        texts.addView(info);
+        row.addView(texts);
+
+        if (size > 0) {
+            Button del = new Button(this);
+            del.setText("删除");
+            del.setTextSize(12);
+            del.setAllCaps(false);
+            del.setMinWidth(dp(64));
+            del.setBackgroundResource(com.minivoice.ime.R.drawable.bg_btn_secondary);
+            del.setTextColor(getColor(com.minivoice.ime.R.color.text_primary));
+            del.setOnClickListener(v -> confirmDelete(title, dir, isLlm));
+            row.addView(del);
+        }
+        llModels.addView(row);
+    }
+
+    private void confirmDelete(String title, java.io.File dir, boolean isLlm) {
+        new AlertDialog.Builder(this)
+                .setMessage("删掉「" + title + "」？下次要用得重新下载。")
+                .setNegativeButton("算了", null)
+                .setPositiveButton("删除", (d, w) -> {
+                    if (isLlm) com.minivoice.ime.asr.LocalLlm.release();
+                    deleteRecursive(dir);
+                    Toast.makeText(this, "已删除", Toast.LENGTH_SHORT).show();
+                    renderModels();
+                    renderPolishEngine();
+                    refreshLocalStatus();
+                })
+                .show();
+    }
+
+    private void deleteRecursive(java.io.File f) {
+        if (f == null || !f.exists()) return;
+        if (f.isDirectory()) {
+            java.io.File[] kids = f.listFiles();
+            if (kids != null) for (java.io.File k : kids) deleteRecursive(k);
+        }
+        f.delete();
+    }
+
+    private long sizeOf(java.io.File f) {
+        if (f == null || !f.exists()) return 0;
+        if (f.isFile()) return f.length();
+        long sum = 0;
+        java.io.File[] kids = f.listFiles();
+        if (kids != null) for (java.io.File k : kids) sum += sizeOf(k);
+        return sum;
     }
 
     private void save() {

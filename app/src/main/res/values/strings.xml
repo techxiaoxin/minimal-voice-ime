@@ -66,4 +66,6 @@
     <string name="llm_download">下载整理模型（约410MB）</string>
     <string name="llm_downloading">正在下载…</string>
     <string name="llm_downloaded">已下载</string>
+    <string name="llm_test">模型测试</string>
+    <string name="llm_testing">测试中…</string>
 </resources>

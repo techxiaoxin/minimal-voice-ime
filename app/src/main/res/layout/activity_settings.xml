@@ -76,103 +76,7 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:background="@drawable/bg_card"
-                android:orientation="vertical"
-                android:padding="14dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/settings_polish"
-                        android:textColor="@color/text_primary"
-                        android:textSize="14sp" />
-
-                    <Switch
-                        android:id="@+id/sw_polish"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content" />
-                </LinearLayout>
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="3dp"
-                    android:lineSpacingExtra="2dp"
-                    android:text="@string/settings_polish_hint"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="11sp" />
-
-                <RadioGroup
-                    android:id="@+id/rg_polish_engine"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:orientation="horizontal">
-
-                    <RadioButton
-                        android:id="@+id/rb_polish_cloud"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:buttonTint="@color/accent"
-                        android:text="@string/polish_engine_cloud"
-                        android:textColor="@color/text_primary"
-                        android:textSize="13sp" />
-
-                    <RadioButton
-                        android:id="@+id/rb_polish_local"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:buttonTint="@color/accent"
-                        android:text="@string/polish_engine_local"
-                        android:textColor="@color/text_primary"
-                        android:textSize="13sp" />
-                </RadioGroup>
-
-                <TextView
-                    android:id="@+id/tv_llm_status"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="11sp" />
-
-                <Button
-                    android:id="@+id/btn_llm_download"
-                    android:layout_width="match_parent"
-                    android:layout_height="42dp"
-                    android:layout_marginTop="6dp"
-                    android:text="@string/llm_download"
-                    android:textSize="13sp" />
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginTop="12dp"
-                    android:layout_marginBottom="10dp"
-                    android:background="@color/divider" />
-
-                <TextView
-                    android:id="@+id/tv_test"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:lineSpacingExtra="3dp"
-                    android:textSize="11sp"
-                    android:visibility="gone" />
-            </LinearLayout>
+            
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -478,7 +382,104 @@
                                 android:lineSpacingExtra="3dp"
                                 android:textColor="@color/text_secondary"
                                 android:textSize="11sp" />
-                        </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_card"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_polish"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp" />
+
+                    <Switch
+                        android:id="@+id/sw_polish"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:lineSpacingExtra="2dp"
+                    android:text="@string/settings_polish_hint"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp" />
+
+                <RadioGroup
+                    android:id="@+id/rg_polish_engine"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <RadioButton
+                        android:id="@+id/rb_polish_cloud"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:buttonTint="@color/accent"
+                        android:text="@string/polish_engine_cloud"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp" />
+
+                    <RadioButton
+                        android:id="@+id/rb_polish_local"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:buttonTint="@color/accent"
+                        android:text="@string/polish_engine_local"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp" />
+                </RadioGroup>
+
+                <TextView
+                    android:id="@+id/tv_llm_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp" />
+
+                <Button
+                    android:id="@+id/btn_llm_download"
+                    android:layout_width="match_parent"
+                    android:layout_height="42dp"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/llm_download"
+                    android:textSize="13sp" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="10dp"
+                    android:background="@color/divider" />
+
+                <TextView
+                    android:id="@+id/tv_test"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:lineSpacingExtra="3dp"
+                    android:textSize="11sp"
+                    android:visibility="gone" />
+            </LinearLayout>
+            </LinearLayout>
         </LinearLayout>
 
         <LinearLayout
@@ -749,11 +750,50 @@
                     android:textColor="@color/text_secondary"
                     android:textSize="11sp" />
 
+
                 <LinearLayout
                     android:id="@+id/ll_peers"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
+                    android:orientation="vertical" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_card"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="已下载的模型"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="用不上的可以直接删"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/ll_models"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
                     android:orientation="vertical" />
             </LinearLayout>
         </LinearLayout>
