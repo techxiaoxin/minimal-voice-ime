@@ -78,13 +78,9 @@ public final class TextPolisher {
         return t;
     }
 
-    /** 太短的句子不值得多跑一次网络，直接原样返回。 */
+    /** 全都交给模型整理，短句也一样，短句最容易识别错，更需要修。 */
     public static void polish(Context ctx, String raw, Callback cb) {
         if (raw == null || raw.trim().isEmpty()) {
-            cb.onResult(raw);
-            return;
-        }
-        if (raw.length() <= 20) {
             cb.onResult(raw);
             return;
         }
