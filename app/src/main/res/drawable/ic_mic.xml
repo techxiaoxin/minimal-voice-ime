@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <!-- 麦身：实心胶囊，水平居中于 x=12 -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M12,2.6 C10.2,2.6 8.8,4 8.8,5.8 L8.8,11.4 C8.8,13.2 10.2,14.6 12,14.6 C13.8,14.6 15.2,13.2 15.2,11.4 L15.2,5.8 C15.2,4 13.8,2.6 12,2.6 Z" />
+    <!-- 支架：左右对称的 U 形 -->
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="1.9"
+        android:fillColor="#00000000"
+        android:pathData="M5.6,10.8 L5.6,11.8 C5.6,15.34 8.46,18.2 12,18.2 C15.54,18.2 18.4,15.34 18.4,11.8 L18.4,10.8" />
+    <!-- 竖杆 -->
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="1.9"
+        android:fillColor="#00000000"
+        android:pathData="M12,18.2 L12,21.2" />
+    <!-- 底座 -->
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="1.9"
+        android:fillColor="#00000000"
+        android:pathData="M8.2,21.2 L15.8,21.2" />
+</vector>

@@ -1,0 +1,757 @@
+package com.minivoice.ime.ui;
+
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.media.AudioFormat;
+import android.media.AudioRecord;
+import android.media.MediaRecorder;
+import android.os.Bundle;
+import android.text.InputType;
+import android.text.TextUtils;
+import android.util.Base64;
+import android.widget.Button;
+import android.widget.CompoundButton;
+import android.widget.EditText;
+import android.widget.ImageButton;
+import android.widget.LinearLayout;
+import android.widget.RadioGroup;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.app.AppCompatActivity;
+
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.minivoice.ime.R;
+import com.minivoice.ime.asr.AsrConfig;
+import com.minivoice.ime.asr.AsrEngine;
+import com.minivoice.ime.asr.LocalAsrEngine;
+import com.minivoice.ime.asr.LocalModelManager;
+import com.minivoice.ime.settings.Prefs;
+import com.minivoice.ime.sync.LanSyncManager;
+
+import java.io.ByteArrayOutputStream;
+import java.net.Proxy;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+
+public class SettingsActivity extends AppCompatActivity {
+
+    private EditText etEndpoint;
+    private EditText etApikey;
+    private EditText etModel;
+    private EditText etDevice;
+    private EditText etVocab;
+    private EditText etPunct;
+    private EditText etFilter;
+    private CompoundButton swPreferBt;
+    private CompoundButton swPolish;
+    private TextView tvPeers;
+    private LinearLayout llPeers;
+    private ImageButton btnEye;
+    private Button btnTest;
+    private TextView tabVoice;
+    private TextView tabMore;
+    private TextView chipAuto;
+    private TextView chipLight;
+    private TextView chipDark;
+    private android.view.View groupVoice;
+    private android.view.View groupMore;
+    private TextView tvTest;
+    private TextView tvKeyResult;
+    private TextView chipSpace;
+    private TextView chipSend;
+    private TextView chipCloud;
+    private TextView chipLocal;
+    private TextView tvModeHint;
+    private TextView tvLocalStatus;
+    private EditText etLocalUrl;
+    private Button btnDownload;
+    private Button btnLocalTest;
+    private android.view.View groupCloud;
+    private android.view.View groupLocal;
+    private boolean keyVisible = false;
+    private boolean voicePage = true;
+    private String savedHintText;
+    private int savedHintColor;
+
+    private final LanSyncManager lan = new LanSyncManager();
+    private final List<LanSyncManager.Peer> peers = new ArrayList<>();
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        ThemeUtil.applyToActivity(this);
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_settings);
+        if (savedInstanceState != null) {
+            voicePage = savedInstanceState.getBoolean("voice_page", true);
+        } else {
+            voicePage = !"more".equals(Prefs.getString(this, "settings_tab", "voice"));
+        }
+
+        etEndpoint = findViewById(R.id.et_endpoint);
+        etApikey = findViewById(R.id.et_apikey);
+        etModel = findViewById(R.id.et_model);
+        etDevice = findViewById(R.id.et_device);
+        etVocab = findViewById(R.id.et_vocab);
+        etPunct = findViewById(R.id.et_punct);
+        etFilter = findViewById(R.id.et_filter);
+        swPreferBt = findViewById(R.id.sw_prefer_bt);
+        swPolish = findViewById(R.id.sw_polish);
+        tvPeers = findViewById(R.id.tv_peers);
+        llPeers = findViewById(R.id.ll_peers);
+        btnEye = findViewById(R.id.btn_eye);
+        btnTest = findViewById(R.id.btn_test);
+        tabVoice = findViewById(R.id.tab_voice);
+        tabMore = findViewById(R.id.tab_more);
+        chipAuto = findViewById(R.id.chip_auto);
+        chipLight = findViewById(R.id.chip_light);
+        chipDark = findViewById(R.id.chip_dark);
+        groupVoice = findViewById(R.id.group_voice);
+        groupMore = findViewById(R.id.group_more);
+        tvTest = findViewById(R.id.tv_test);
+        tvKeyResult = findViewById(R.id.tv_key_result);
+        chipSpace = findViewById(R.id.chip_space);
+        chipSend = findViewById(R.id.chip_send);
+        chipSpace.setOnClickListener(v -> setSpaceMode(Prefs.SPACE_INSERT));
+        chipSend.setOnClickListener(v -> setSpaceMode(Prefs.SPACE_SEND));
+        chipCloud = findViewById(R.id.chip_cloud);
+        chipLocal = findViewById(R.id.chip_local);
+        tvModeHint = findViewById(R.id.tv_mode_hint);
+        tvLocalStatus = findViewById(R.id.tv_local_status);
+        etLocalUrl = findViewById(R.id.et_local_url);
+        btnDownload = findViewById(R.id.btn_download);
+        btnLocalTest = findViewById(R.id.btn_local_test);
+        groupCloud = findViewById(R.id.group_cloud);
+        groupLocal = findViewById(R.id.group_local);
+
+        chipCloud.setOnClickListener(v -> selectMode(false));
+        chipLocal.setOnClickListener(v -> selectMode(true));
+        btnDownload.setOnClickListener(v -> downloadModel());
+        btnLocalTest.setOnClickListener(v -> testLocalModel());
+
+        TextView tvVersion = findViewById(R.id.tv_version);
+        try {
+            String vn = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            tvVersion.setText("v" + vn);
+        } catch (Exception ignored) {
+            tvVersion.setText("v?");
+        }
+
+        tvTest.setOnClickListener(v -> {
+            CharSequence t = tvTest.getText();
+            if (TextUtils.isEmpty(t)) return;
+            android.content.ClipboardManager cm =
+                    (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (cm != null) {
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("测试结果", t));
+                Toast.makeText(this, "已复制，可以直接粘贴发给我", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        btnEye.setOnClickListener(v -> toggleKeyVisible());
+        btnTest.setOnClickListener(v -> testConnection());
+        tabVoice.setOnClickListener(v -> switchTab(true));
+        tabMore.setOnClickListener(v -> switchTab(false));
+
+        chipAuto.setOnClickListener(v -> setTheme(ThemeUtil.AUTO));
+        chipLight.setOnClickListener(v -> setTheme(ThemeUtil.LIGHT));
+        chipDark.setOnClickListener(v -> setTheme(ThemeUtil.DARK));
+
+        Button btnSave = findViewById(R.id.btn_save);
+        Button btnScan = findViewById(R.id.btn_scan);
+
+        load();
+        styleThemeChips();
+        styleSpaceChips();
+        renderMode(AsrConfig.PROTOCOL_LOCAL.equals(Prefs.getString(this, Prefs.K_PROTOCOL, "")));
+        switchTab(voicePage);
+
+        btnSave.setOnClickListener(v -> {
+            save();
+            flashSaved(btnSave);
+        });
+
+        btnScan.setOnClickListener(v -> scan());
+
+    }
+
+    @Override
+    protected void onSaveInstanceState(android.os.Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putBoolean("voice_page", voicePage);
+    }
+
+    /** 保存按钮原地变绿显示“已保存”，一秒多后自己变回来。 */
+    private void flashSaved(Button btn) {
+        if (savedHintText == null) {
+            savedHintText = btn.getText().toString();
+            savedHintColor = btn.getCurrentTextColor();
+        }
+        btn.setText("已保存");
+        btn.setBackgroundResource(R.drawable.bg_btn_success);
+        btn.setTextColor(0xFFFFFFFF);
+        btn.postDelayed(() -> {
+            btn.setText(savedHintText);
+            btn.setBackgroundResource(R.drawable.bg_btn_primary);
+            btn.setTextColor(savedHintColor);
+        }, 1400);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        String name = TextUtils.isEmpty(etDevice.getText())
+                ? android.os.Build.MODEL
+                : etDevice.getText().toString();
+        lan.startAdvertising(this, name);
+    }
+
+    @Override
+    protected void onDestroy() {
+        lan.stop(this);
+        super.onDestroy();
+    }
+
+    private void load() {
+        AsrConfig c = AsrConfig.load(this);
+        etEndpoint.setText(c.endpoint);
+        etApikey.setText(c.apiKey);
+        etModel.setText(c.model);
+
+        etDevice.setText(Prefs.getString(this, Prefs.K_DEVICE_NAME,
+                android.os.Build.MODEL));
+        etVocab.setText(String.join("\n", Prefs.getWordList(this)));
+        etPunct.setText(Prefs.getString(this, Prefs.K_PUNCT, ""));
+        etFilter.setText(Prefs.getString(this, Prefs.K_FILTER, "嗯,呃,啊,那个,就是"));
+        swPreferBt.setChecked(Prefs.getBool(this, Prefs.K_PREFER_BT, true));
+        swPolish.setChecked(c.polish);
+        etLocalUrl.setText(Prefs.getString(this, Prefs.K_LOCAL_URL, LocalModelManager.STREAM_BASE_DEFAULT));
+        refreshLocalStatus();
+    }
+
+    /** 云端 / 本地切换，点一下就生效，不用等保存。 */
+    private void selectMode(boolean local) {
+        Prefs.putString(this, Prefs.K_PROTOCOL,
+                local ? AsrConfig.PROTOCOL_LOCAL : AsrConfig.PROTOCOL_BAILIAN);
+        renderMode(local);
+    }
+
+    private void renderMode(boolean local) {
+        groupCloud.setVisibility(local ? android.view.View.GONE : android.view.View.VISIBLE);
+        groupLocal.setVisibility(local ? android.view.View.VISIBLE : android.view.View.GONE);
+        styleChip(chipCloud, !local);
+        styleChip(chipLocal, local);
+        tvModeHint.setText(local
+                ? "离线识别，模型要先下好。整理也在本机做，不联网。"
+                : "连云端接口，边说边出字。");
+        refreshLocalStatus();
+    }
+
+    private void refreshLocalStatus() {
+        if (tvLocalStatus == null) return;
+        if (LocalModelManager.isReady(this)) {
+            tvLocalStatus.setText("模型已就位，" + LocalModelManager.statusText(this));
+            btnDownload.setText("重新下载");
+        } else {
+            tvLocalStatus.setText("状态：" + LocalModelManager.statusText(this));
+            btnDownload.setText("下载模型");
+        }
+    }
+
+    private void downloadModel() {
+        String url = etLocalUrl.getText().toString().trim();
+        Prefs.putString(this, Prefs.K_LOCAL_URL,
+                url.isEmpty() ? LocalModelManager.STREAM_BASE_DEFAULT : url);
+        btnDownload.setEnabled(false);
+        btnLocalTest.setEnabled(false);
+        tvLocalStatus.setText("准备下载…");
+        new Thread(() -> LocalModelManager.download(this, new LocalModelManager.Listener() {
+            @Override
+            public void onFile(int index, int total, String name) {
+                runOnUiThread(() -> tvLocalStatus.setText("正在下载第 " + (index + 1)
+                        + "/" + total + " 个文件：" + name));
+            }
+
+            @Override
+            public void onProgress(float progress, long downloaded, long total) {
+                runOnUiThread(() -> tvLocalStatus.setText(String.format(java.util.Locale.CHINA,
+                        "下载中 %.1f%%  %.1fMB / %.1fMB",
+                        progress * 100, downloaded / 1024f / 1024f, total / 1024f / 1024f)));
+            }
+
+            @Override
+            public void onDone() {
+                runOnUiThread(() -> {
+                    btnDownload.setEnabled(true);
+                    btnLocalTest.setEnabled(true);
+                    refreshLocalStatus();
+                    Toast.makeText(SettingsActivity.this, "模型下载完成，可以切到本地用了",
+                            Toast.LENGTH_SHORT).show();
+                });
+            }
+
+            @Override
+            public void onError(String message) {
+                runOnUiThread(() -> {
+                    btnDownload.setEnabled(true);
+                    btnLocalTest.setEnabled(true);
+                    tvLocalStatus.setText(message);
+                });
+            }
+        })).start();
+    }
+
+    /** 真加载一次模型，把包内那段语音喂进去，能出字才算通过。 */
+    private void testLocalModel() {
+        if (!LocalModelManager.isReady(this)) {
+            tvLocalStatus.setText("模型还没下完，先点上面的下载");
+            return;
+        }
+        btnLocalTest.setEnabled(false);
+        tvLocalStatus.setText("正在加载模型…");
+        new Thread(() -> {
+            byte[] pcm = probeWav();
+            if (pcm.length == 0) {
+                runOnUiThread(() -> {
+                    btnLocalTest.setEnabled(true);
+                    tvLocalStatus.setText("测试语音读不出来");
+                });
+                return;
+            }
+            final String[] out = {""};
+            final boolean[] failed = {false};
+            LocalAsrEngine engine = new LocalAsrEngine(this);
+            engine.start(new AsrEngine.Callback() {
+                @Override
+                public void onPartial(String text) {
+                    runOnUiThread(() -> tvLocalStatus.setText("识别中：" + text));
+                }
+
+                @Override
+                public void onFinal(String text) {
+                    out[0] = text;
+                }
+
+                @Override
+                public void onError(String message) {
+                    failed[0] = true;
+                    out[0] = message;
+                }
+            });
+            long t0 = System.currentTimeMillis();
+            for (int i = 0; i < pcm.length; i += 3200) {
+                int n = Math.min(3200, pcm.length - i);
+                byte[] chunk = new byte[n];
+                System.arraycopy(pcm, i, chunk, 0, n);
+                engine.feed(chunk, n);
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException ignored) {
+                }
+            }
+            engine.finish();
+            long waited = 0;
+            while (out[0].isEmpty() && waited < 15000) {
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException ignored) {
+                }
+                waited += 100;
+            }
+            final String text = out[0];
+            final boolean bad = failed[0];
+            final long cost = System.currentTimeMillis() - t0;
+            runOnUiThread(() -> {
+                btnLocalTest.setEnabled(true);
+                if (bad || text.isEmpty()) {
+                    tvLocalStatus.setText("本地模型没通过：" + (text.isEmpty() ? "没出字" : text));
+                } else {
+                    tvLocalStatus.setText("本地模型正常，用时 " + (cost / 1000f) + " 秒：\n" + text);
+                }
+            });
+        }).start();
+    }
+
+    private void toggleKeyVisible() {
+        keyVisible = !keyVisible;
+        etApikey.setInputType(keyVisible
+                ? InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                : InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        etApikey.setSelection(etApikey.getText().length());
+        btnEye.setImageResource(keyVisible ? R.drawable.ic_eye_off : R.drawable.ic_eye);
+        btnEye.setContentDescription(getString(
+                keyVisible ? R.string.settings_key_hide : R.string.settings_key_show));
+    }
+
+    private void save() {
+        AsrConfig c = new AsrConfig();
+        c.endpoint = etEndpoint.getText().toString().trim();
+        c.apiKey = AsrConfig.sanitizeKey(etApikey.getText().toString());
+        c.model = etModel.getText().toString().trim();
+        if (c.endpoint.isEmpty()) c.endpoint = AsrConfig.BAILIAN_NATIVE_ENDPOINT;
+        if (c.apiKey.isEmpty()) c.apiKey = AsrConfig.BAILIAN_KEY;
+        if (c.model.isEmpty()) c.model = AsrConfig.BAILIAN_MODEL;
+        c.protocol = AsrConfig.PROTOCOL_LOCAL.equals(Prefs.getString(this, Prefs.K_PROTOCOL, ""))
+                ? AsrConfig.PROTOCOL_LOCAL : AsrConfig.PROTOCOL_BAILIAN;
+        c.polish = swPolish != null && swPolish.isChecked();
+        c.save(this);
+
+        Prefs.putString(this, Prefs.K_DEVICE_NAME, etDevice.getText().toString().trim());
+        Prefs.setWordList(this, splitLines(etVocab.getText().toString()));
+        Prefs.putString(this, Prefs.K_PUNCT, etPunct.getText().toString().trim());
+        Prefs.putString(this, Prefs.K_FILTER, etFilter.getText().toString().trim());
+        Prefs.putBool(this, Prefs.K_PREFER_BT, swPreferBt.isChecked());
+        String localUrl = etLocalUrl.getText().toString().trim();
+        Prefs.putString(this, Prefs.K_LOCAL_URL,
+                localUrl.isEmpty() ? LocalModelManager.STREAM_BASE_DEFAULT : localUrl);
+        refreshLocalStatus();
+        Prefs.putString(this, Prefs.K_THEME, ThemeUtil.mode(this));
+        Prefs.markPendingSync(this, true);
+    }
+
+
+    /** 两页切换，避免一屏塞太多东西。 */
+    private void switchTab(boolean voicePage) {
+        this.voicePage = voicePage;
+        Prefs.putString(this, "settings_tab", voicePage ? "voice" : "more");
+        groupVoice.setVisibility(voicePage ? android.view.View.VISIBLE : android.view.View.GONE);
+        groupMore.setVisibility(voicePage ? android.view.View.GONE : android.view.View.VISIBLE);
+        styleTab(tabVoice, voicePage);
+        styleTab(tabMore, !voicePage);
+    }
+
+    /** 选中的页签变蓝底白字，另一个是透明底灰字。 */
+    private void styleTab(TextView tab, boolean active) {
+        tab.setBackgroundResource(active ? R.drawable.bg_chip_active : R.drawable.bg_chip_idle);
+        tab.setTextColor(active ? 0xFFFFFFFF : getColor(R.color.text_secondary));
+    }
+
+    private void setTheme(String mode) {
+        Prefs.putString(this, Prefs.K_THEME, mode);
+        styleThemeChips();
+        ThemeUtil.applyToActivity(this);
+    }
+
+    private void styleThemeChips() {
+        String mode = ThemeUtil.mode(this);
+        styleChip(chipAuto, ThemeUtil.AUTO.equals(mode));
+        styleChip(chipLight, ThemeUtil.LIGHT.equals(mode));
+        styleChip(chipDark, ThemeUtil.DARK.equals(mode));
+    }
+
+    private void setSpaceMode(String mode) {
+        Prefs.putString(this, Prefs.K_SPACE_MODE, mode);
+        styleSpaceChips();
+    }
+
+    private void styleSpaceChips() {
+        String mode = Prefs.getString(this, Prefs.K_SPACE_MODE, Prefs.SPACE_SEND);
+        styleChip(chipSpace, Prefs.SPACE_INSERT.equals(mode));
+        styleChip(chipSend, Prefs.SPACE_SEND.equals(mode));
+    }
+
+    private void styleChip(TextView chip, boolean active) {
+        if (chip == null) return;
+        chip.setBackgroundResource(active ? R.drawable.bg_chip_active : R.drawable.bg_chip_idle);
+        chip.setTextColor(active ? 0xFFFFFFFF : getColor(R.color.text_secondary));
+    }
+
+    private static byte[] wrapWav(byte[] pcm) {
+        int rate = 16000, ch = 1;
+        int dataLen = pcm.length, byteRate = rate * ch * 2;
+        byte[] h = new byte[44];
+        h[0] = 0x52; h[1] = 0x49; h[2] = 0x46; h[3] = 0x46;
+        int riff = 36 + dataLen;
+        h[4] = (byte) riff; h[5] = (byte) (riff >> 8);
+        h[6] = (byte) (riff >> 16); h[7] = (byte) (riff >> 24);
+        h[8] = 0x57; h[9] = 0x41; h[10] = 0x56; h[11] = 0x45;
+        h[12] = 0x66; h[13] = 0x6D; h[14] = 0x74; h[15] = 0x20;
+        h[16] = 16; h[20] = 1; h[22] = (byte) ch;
+        h[24] = (byte) rate; h[25] = (byte) (rate >> 8);
+        h[26] = (byte) (rate >> 16); h[27] = (byte) (rate >> 24);
+        h[28] = (byte) byteRate; h[29] = (byte) (byteRate >> 8);
+        h[30] = (byte) (byteRate >> 16); h[31] = (byte) (byteRate >> 24);
+        h[32] = (byte) (ch * 2); h[34] = 16;
+        h[36] = 0x64; h[37] = 0x61; h[38] = 0x74; h[39] = 0x61;
+        h[40] = (byte) dataLen; h[41] = (byte) (dataLen >> 8);
+        h[42] = (byte) (dataLen >> 16); h[43] = (byte) (dataLen >> 24);
+        byte[] out = new byte[44 + dataLen];
+        System.arraycopy(h, 0, out, 0, 44);
+        System.arraycopy(pcm, 0, out, 44, dataLen);
+        return out;
+    }
+
+    /** 用当前填写的地址、Key、模型真发一次请求，跑通才是绿。 */
+    private void testConnection() {
+        String url = etEndpoint.getText().toString().trim();
+        String rawKey = etApikey.getText().toString();
+        String key = AsrConfig.sanitizeKey(rawKey);
+        String model = etModel.getText().toString().trim();
+
+        if (key.isEmpty()) {
+            showTest("Key 是空的，先填上再测", COLOR_RED);
+            return;
+        }
+        boolean cleaned = !key.equals(rawKey.trim());
+        if (url.isEmpty()) {
+            showTest("接口地址是空的，先填一下", COLOR_RED);
+            return;
+        }
+        if (model.isEmpty()) {
+            showTest("模型名称是空的，先填一下", COLOR_RED);
+            return;
+        }
+
+        showTest("正在联网测试…", COLOR_GRAY);
+        btnTest.setEnabled(false);
+
+        new Thread(() -> {
+            String outIp = fetchOutIp();
+            String ipNote = outIp.isEmpty()
+                    ? "出口IP 查不到"
+                    : ("出口IP " + outIp + (outIp.contains(":") ? "（IPv6）" : "（IPv4）"));
+            String body;
+            if (model.contains("asr")) {
+                String dataUri = "data:audio/wav;base64,"
+                        + Base64.encodeToString(probeWav(), Base64.NO_WRAP);
+                body = "{\"model\":\"" + model + "\","
+                        + "\"input\":{\"messages\":[{\"role\":\"user\",\"content\":["
+                        + "{\"type\":\"input_audio\",\"input_audio\":{\"data\":\"" + dataUri + "\"}}]}]},"
+                        + "\"parameters\":{\"format\":\"wav\",\"sample_rate\":\"16000\","
+                        + "\"language_hints\":[\"zh\"]}}";
+            } else {
+                body = "{\"model\":\"" + model + "\",\"messages\":"
+                        + "[{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":8}";
+            }
+
+            OkHttpClient client = new OkHttpClient.Builder()
+                    .connectTimeout(15, TimeUnit.SECONDS)
+                    .readTimeout(40, TimeUnit.SECONDS)
+                    .protocols(java.util.Collections.singletonList(okhttp3.Protocol.HTTP_1_1))
+                    .proxy(Proxy.NO_PROXY)
+                    .build();
+            Request request = new Request.Builder()
+                    .url(url)
+                    .addHeader("Authorization", "Bearer " + key)
+                    .addHeader("X-DashScope-SSE", "disable")
+                    .post(RequestBody.create(body,
+                            MediaType.parse("application/json; charset=utf-8")))
+                    .build();
+
+            try (Response r = client.newCall(request).execute()) {
+                String text = r.body() == null ? "" : r.body().string();
+                int code = r.code();
+                if (code == 200) {
+                    runOnUiThread(() -> doneTest(true,
+                            "连接正常，这个 Key 和模型可以用", COLOR_GREEN));
+                } else if (code == 401 || code == 403) {
+                    String tail = key.length() > 4 ? key.substring(key.length() - 4) : key;
+                    boolean sameAsBuiltin = fp(key).equals(fp(AsrConfig.BAILIAN_KEY));
+                    String rid = requestId(text);
+                    String note = "Key 被拒（" + code + "）· 长度" + key.length() + " 尾号" + tail
+                            + (cleaned ? "（已清多余字符）" : "")
+                            + " · " + (sameAsBuiltin ? "与内置 Key 完全一致" : "与内置 Key 不一致")
+                            + " · " + (rid.isEmpty() ? "响应里没有服务端编号，不是百炼发出的" : "服务端编号 " + rid)
+                            + " · " + ipNote
+                            + " · " + extractMsg(text);
+                    runOnUiThread(() -> doneTest(false, note, COLOR_RED));
+                } else if (code == 400 && text.contains("ASR_RESPONSE_HAVE_NO_WORDS")) {
+                    runOnUiThread(() -> doneTest(true,
+                            "连接正常，模型能用（测试音频没识别到字）", COLOR_GREEN));
+                } else if (code == 400) {
+                    runOnUiThread(() -> doneTest(false,
+                            "Key 通了，但请求被拒（400）：" + extractMsg(text), COLOR_YELLOW));
+                } else {
+                    runOnUiThread(() -> doneTest(false,
+                            "请求失败（" + code + "）：" + extractMsg(text), COLOR_RED));
+                }
+            } catch (Exception e) {
+                runOnUiThread(() -> doneTest(false, "网络没通：" + e.getMessage(), COLOR_RED));
+            }
+        }).start();
+    }
+
+    private static final int COLOR_GREEN = 0xFF22C55E;
+    private static final int COLOR_RED = 0xFFFF4D4F;
+    private static final int COLOR_YELLOW = 0xFFF5A623;
+    private static final int COLOR_GRAY = 0xFF9BA1AC;
+
+    private void doneTest(boolean pass, String text, int color) {
+        btnTest.setEnabled(true);
+        showTest((pass ? "✓ " : "✕ ") + text, color);
+    }
+
+    /** Key 和模型的测试结果，显示在测试按钮正下方那一行。 */
+    private void showTest(String text, int color) {
+        tvKeyResult.setVisibility(TextView.VISIBLE);
+        tvKeyResult.setText(text);
+        tvKeyResult.setTextColor(color);
+    }
+
+    /** 取 Key 的 MD5 前 8 位，用来判断输入框里的串和内置串是不是同一个。 */
+    private String fp(String s) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+            byte[] d = md.digest(s.getBytes("UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < 4; i++) sb.append(String.format("%02x", d[i]));
+            return sb.toString();
+        } catch (Exception e) {
+            return "?";
+        }
+    }
+
+    /** 查一次这台手机的出口 IP，IPv6 出口常被网关当成陌生来源。 */
+    private String fetchOutIp() {
+        try {
+            OkHttpClient c = new OkHttpClient.Builder()
+                    .connectTimeout(6, TimeUnit.SECONDS)
+                    .readTimeout(6, TimeUnit.SECONDS)
+                    .proxy(Proxy.NO_PROXY)
+                    .build();
+            Request req = new Request.Builder().url("https://myip.ipip.net").get().build();
+            try (Response resp = c.newCall(req).execute()) {
+                if (resp.body() == null) return "";
+                String t = resp.body().string();
+                int i = t.indexOf("IP：");
+                if (i < 0) i = t.indexOf("IP:");
+                if (i < 0) return "";
+                String sub = t.substring(i + 3).trim();
+                int sp = sub.indexOf(" ");
+                return (sp > 0 ? sub.substring(0, sp) : sub).trim();
+            }
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /** 真服务端返回的响应一定带 request_id，没有就说明不是百炼发出来的。 */
+    private String requestId(String json) {
+        try {
+            JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+            if (root.has("request_id")) return root.get("request_id").getAsString();
+        } catch (Exception ignored) {
+        }
+        return "";
+    }
+
+    private String extractMsg(String json) {
+        try {
+            JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+            if (root.has("error") && root.get("error").isJsonObject()) {
+                JsonObject e = root.getAsJsonObject("error");
+                if (e.has("message")) return e.get("message").getAsString();
+            }
+            if (root.has("message")) return root.get("message").getAsString();
+        } catch (Exception ignored) {
+        }
+        return json.length() > 90 ? json.substring(0, 90) : json;
+    }
+
+    /** 包内自带的一段中文语音，真发一次识别请求，跑通才算可用。 */
+    private byte[] probeWav() {
+        try (java.io.InputStream in = getResources().openRawResource(R.raw.test_voice)) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            return out.toByteArray();
+        } catch (IOException e) {
+            return new byte[0];
+        }
+    }
+
+    private List<String> splitLines(String raw) {
+        List<String> out = new ArrayList<>();
+        for (String line : raw.split("\n")) {
+            String t = line.trim();
+            if (!t.isEmpty()) out.add(t);
+        }
+        return out;
+    }
+
+    private void scan() {
+        if (!voicePage) return;
+        peers.clear();
+        llPeers.removeAllViews();
+        tvPeers.setText("扫描中…，最多等 4 秒");
+        Button btn = findViewById(R.id.btn_scan);
+        btn.setEnabled(false);
+        lan.discover(this, new LanSyncManager.PeerCallback() {
+            @Override
+            public void onResult(List<LanSyncManager.Peer> result) {
+                if (isFinishing() || isDestroyed()) return;
+                btn.setEnabled(true);
+                peers.clear();
+                peers.addAll(result);
+                if (peers.isEmpty()) {
+                    tvPeers.setText("没扫到设备。两台手机要连同一个 WiFi，都打开过这个设置页。");
+                    llPeers.removeAllViews();
+                } else {
+                    tvPeers.setText("找到 " + peers.size() + " 台，点下面的设备把设置推过去");
+                    renderPeerList();
+                }
+            }
+
+            @Override
+            public void onError(String message) {
+                if (isFinishing() || isDestroyed()) return;
+                btn.setEnabled(true);
+                tvPeers.setText(message);
+            }
+        });
+    }
+
+    /** 扫到的设备一行一个，点了就推配置过去。 */
+    private void renderPeerList() {
+        llPeers.removeAllViews();
+        for (LanSyncManager.Peer p : peers) {
+            TextView row = new TextView(this);
+            row.setText(p.name + "\n" + p.host);
+            row.setTextSize(12);
+            row.setTextColor(getColor(R.color.text_primary));
+            row.setLineSpacing(2, 1f);
+            row.setBackgroundResource(R.drawable.bg_input);
+            row.setPadding(dp(12), dp(9), dp(12), dp(9));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT);
+            lp.topMargin = dp(6);
+            row.setLayoutParams(lp);
+            row.setOnClickListener(v -> confirmPush(p));
+            llPeers.addView(row);
+        }
+    }
+
+    private void confirmPush(LanSyncManager.Peer p) {
+        new AlertDialog.Builder(this)
+                .setTitle("推送到 " + p.name)
+                .setMessage("把接口、Key、模型、主题、词表这些设置推过去，对方的会合并。")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("推送", (d, w) -> push(p))
+                .show();
+    }
+
+    private int dp(int v) {
+        return (int) (v * getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private void push(LanSyncManager.Peer peer) {
+        Map<String, String> payload = Prefs.exportSyncPayload(this);
+        lan.push(peer, payload, (ok, message) -> {
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+            if (ok) Prefs.markPendingSync(this, false);
+        });
+    }
+}

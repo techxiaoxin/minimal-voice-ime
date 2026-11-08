@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- 外层深色底 -->
+    <path android:fillColor="#0F1115"
+        android:pathData="M26,0h56a26,26 0 0 1 26,26v56a26,26 0 0 1 -26,26h-56a26,26 0 0 1 -26,-26v-56a26,26 0 0 1 26,-26z" />
+    <!-- 内层蓝色圆角块 -->
+    <path android:fillColor="#2E6BE6"
+        android:pathData="M32,14h44a18,18 0 0 1 18,18v44a18,18 0 0 1 -18,18h-44a18,18 0 0 1 -18,-18v-44a18,18 0 0 1 18,-18z" />
+    <!-- 麦身 -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M54,27 C48.7,27 44.5,31.2 44.5,36.5 L44.5,49 C44.5,54.3 48.7,58.5 54,58.5 C59.3,58.5 63.5,54.3 63.5,49 L63.5,36.5 C63.5,31.2 59.3,27 54,27 Z" />
+    <!-- 支架 U 形 -->
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="4.2"
+        android:fillColor="#00000000"
+        android:pathData="M33,44 L33,48.5 C33,60.1 42.4,69.5 54,69.5 C65.6,69.5 75,60.1 75,48.5 L75,44" />
+    <!-- 竖杆 -->
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="4.2"
+        android:fillColor="#00000000"
+        android:pathData="M54,69.5 L54,82" />
+    <!-- 底座 -->
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="4.2"
+        android:fillColor="#00000000"
+        android:pathData="M43,82 L65,82" />
+</vector>

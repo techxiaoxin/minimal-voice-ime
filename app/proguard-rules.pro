@@ -1,0 +1,3 @@
+-keep class com.minivoice.ime.** { *; }
+-dontwarn okhttp3.**
+-dontwarn okio.**

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">极简语音</string>
+    <string name="settings_title">设置</string>
+    <string name="subtype_label">语音输入</string>
+    <string name="accessibility_label">极简语音按键拦截</string>
+    <string name="accessibility_desc">用于拦截蓝牙耳机按键、把按键映射为开始或结束语音输入。只在系统输入法为极简语音时生效。</string>
+
+    <string name="btn_voice">语音</string>
+    <string name="btn_delete">删除</string>
+    <string name="btn_send">发送</string>
+    <string name="btn_settings">设置</string>
+    <string name="btn_grid">切换输入法</string>
+    <string name="btn_mode_cn">中</string>
+    <string name="btn_mode_num">123</string>
+    <string name="btn_expand">展开表情区</string>
+
+    <string name="voice_hint">按住说话</string>
+    <string name="voice_swipe_cancel">上滑取消</string>
+    <string name="voice_tap_send">点击回车/发送</string>
+    <string name="voice_tap_space">点击空格</string>
+    <string name="voice_release">松开结束</string>
+    <string name="voice_thinking">识别中…</string>
+    <string name="voice_live">边说边出字，松手定稿</string>
+    <string name="voice_need_setup">先配置识别方式</string>
+    <string name="voice_no_service">没有本地识别服务，去设置换成云端</string>
+
+    <string name="hint_not_default">极简语音还没有被设为默认输入法</string>
+    <string name="action_enable_ime">启用输入法</string>
+    <string name="action_choose_ime">设为默认输入法</string>
+    <string name="action_settings">打开设置</string>
+
+    <string name="settings_asr_title">语音识别接口</string>
+    <string name="settings_endpoint">请求地址</string>
+    <string name="settings_apikey">API Key</string>
+    <string name="settings_model">模型名称</string>
+    <string name="settings_protocol">识别方式</string>
+    <string name="settings_mode_bailian">百炼 Qwen3-ASR（内置，装完可用）</string>
+    <string name="settings_mode_local">本地识别</string>
+    <string name="settings_mode_http">HTTP 整段上传</string>
+    <string name="settings_mode_ws">WebSocket 流式</string>
+    <string name="settings_mode_local_hint">本地识别用手机自带的语音服务，不联网、不填地址。部分机型要先在系统设置里下载中文离线语音包，不然会退回联网识别。</string>
+    <string name="settings_language">识别语言</string>
+    <string name="settings_test">测试连通性</string>
+    <string name="settings_bluetooth">蓝牙</string>
+    <string name="settings_prefer_bt">优先使用蓝牙麦克风</string>
+    <string name="settings_sync">局域网同步</string>
+    <string name="settings_device_name">本机名称</string>
+    <string name="settings_scan">发现同网设备</string>
+    <string name="settings_push">推送偏好到设备</string>
+    <string name="settings_vocab">自定义词表</string>
+    <string name="settings_punct">标点规则</string>
+    <string name="settings_filter">语气词过滤</string>
+    <string name="settings_save">保存</string>
+    <string name="settings_saved">已保存</string>
+    <string name="settings_key_show">显示 Key</string>
+    <string name="settings_key_hide">隐藏 Key</string>
+    <string name="settings_test_voice">录 3 秒音，测真实识别</string>
+    <string name="settings_test_key">测试 Key 和模型</string>
+    <string name="settings_polish">AI 整理文字</string>
+    <string name="settings_polish_hint">开启后把话整理成书面语，会多等 1 到 2 秒。</string>
+</resources>

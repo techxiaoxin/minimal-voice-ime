@@ -1,0 +1,27 @@
+# 构建产物
+build/
+app/build/
+.gradle/
+.gradle-home/
+.android-home/
+
+# 本机路径和密钥，绝不能进仓库
+local.properties
+
+# 工具链，1.5G，靠 README 说明自己装
+devtools/
+
+# 打出来的安装包，走 Release 附件，正文库不塞二进制
+*.apk
+*.aab
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# 抓的日志和临时脚本
+*.log
+
+# 内部交接文档，里面有真实 Key 和私人记录，不公开
+项目交接.md
