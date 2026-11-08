@@ -543,21 +543,27 @@ public class SettingsActivity extends AppCompatActivity {
         btnLlmDownload.setText(R.string.llm_testing);
         tvTest.setVisibility(android.view.View.VISIBLE);
         tvTest.setText("正在加载模型…");
-        final String sample = "嗯那个我想问一下就是这个功能大概什么时候能上线呢我这边还等着用";
+        final String[] samples = {
+                "嗯那个我今天下午大概三点左右吧去那个福田的 apple 店看一下 iphone 的新机子啊顺便问问 wifi 那个问题",
+                "就是说这个东西呢我觉得还行吧但是它那个 type c 的接口啊好像不太稳当然后那个蓝牙也老是断"
+        };
         new Thread(() -> {
-            long t0 = android.os.SystemClock.uptimeMillis();
-            String out = com.minivoice.ime.asr.LlmPolisher.polish(SettingsActivity.this, sample);
-            long cost = android.os.SystemClock.uptimeMillis() - t0;
+            StringBuilder sb = new StringBuilder();
+            for (String sample : samples) {
+                long t0 = android.os.SystemClock.uptimeMillis();
+                String out = com.minivoice.ime.asr.LlmPolisher.polish(SettingsActivity.this, sample);
+                long cost = android.os.SystemClock.uptimeMillis() - t0;
+                if (out == null || out.isEmpty()) {
+                    out = "（模型没给出结果，可能内存不够或者模型文件有问题）";
+                }
+                sb.append("原文：").append(sample).append("\n整理：").append(out)
+                        .append(String.format(java.util.Locale.CHINA, "\n耗时 %.1f 秒\n\n", cost / 1000f));
+            }
+            final String text = sb.toString().trim();
             runOnUiThread(() -> {
                 btnLlmDownload.setEnabled(true);
                 btnLlmDownload.setText(R.string.llm_test);
-                tvTest.setVisibility(android.view.View.VISIBLE);
-                if (out == null || out.isEmpty()) {
-                    tvTest.setText("模型没给出结果，可能是内存不够或者模型文件有问题");
-                } else {
-                    tvTest.setText("原文：" + sample + "\n整理：" + out
-                            + String.format(java.util.Locale.CHINA, "\n耗时 %.1f 秒", cost / 1000f));
-                }
+                tvTest.setText(text);
             });
         }).start();
     }
