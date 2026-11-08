@@ -7,6 +7,7 @@ import com.minivoice.ime.settings.Prefs;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.OkHttpClient;
@@ -14,47 +15,67 @@ import okhttp3.Request;
 import okhttp3.Response;
 
 /**
- * 本地模型的存放与下载。装两套：
+ * 本地模型的存放与下载。分两档规格，用户在设置页自己选，也允许改下载地址：
  *
- * 1. 流式小模型，负责边说边出字，回显快但准确率一般；
- * 2. SenseVoice 高精度模型，负责松手后的终稿，带标点，准确率明显更高。
+ * 轻量档：14M 流式小模型出预览，SenseVoice int8 出终稿，一共约 253MB，快、占空间小。
+ * 高精度档：中英双语流式模型出预览，whisper small int8 出终稿，一共约 547MB，中英混说准得多。
  *
- * 两套都放在手机内部存储，用户自己在设置页点下载。地址默认走国内镜像，可以改。
+ * 改地址只要文件名跟这一档的约定一致就能下，用户自己找的同款模型也能用。
  */
 public final class LocalModelManager {
 
+    public static final String TIER_LIGHT = "light";
+    public static final String TIER_HQ = "hq";
+
+    /** 轻量档的两个目录，沿用老名字，已经下过的用户不用重下。 */
     public static final String STREAM_DIR = "sherpa-zh14m";
     public static final String SV_DIR = "sherpa-sensevoice";
+    /** 高精度档单独放两个目录，两档可以共存，来回切不用重下。 */
+    public static final String HQ_STREAM_DIR = "sherpa-zh-en-stream";
+    public static final String HQ_FINAL_DIR = "sherpa-whisper-small";
 
-    public static final String STREAM_LABEL = "流式小模型";
-    public static final String SV_LABEL = "高精度模型";
-
-    /** 流式模型的四个文件。 */
-    public static final String[] STREAM_FILES = {
+    /** 轻量档：流式小模型四个文件。 */
+    public static final String[] LIGHT_STREAM_FILES = {
             "encoder-epoch-99-avg-1.int8.onnx",
             "decoder-epoch-99-avg-1.int8.onnx",
             "joiner-epoch-99-avg-1.int8.onnx",
             "tokens.txt",
     };
-    public static final long[] STREAM_SIZES = {
+    public static final long[] LIGHT_STREAM_SIZES = {
             21621684L, 1888682L, 1795562L, 48697L,
     };
 
-    /** 高精度模型的两个文件，SenseVoice，中文带标点。 */
-    public static final String[] SV_FILES = {"model.int8.onnx", "tokens.txt"};
-    public static final long[] SV_SIZES = {239233841L, 315894L};
+    /** 轻量档：SenseVoice int8，中文带标点。 */
+    public static final String[] LIGHT_FINAL_FILES = {"model.int8.onnx", "tokens.txt"};
+    public static final long[] LIGHT_FINAL_SIZES = {239233841L, 315894L};
+
+    /** 高精度档：中英双语流式模型，文件名跟轻量档一模一样，只是内容不同。 */
+    public static final String[] HQ_STREAM_FILES = {
+            "encoder-epoch-99-avg-1.int8.onnx",
+            "decoder-epoch-99-avg-1.int8.onnx",
+            "joiner-epoch-99-avg-1.int8.onnx",
+            "tokens.txt",
+    };
+    public static final long[] HQ_STREAM_SIZES = {
+            181895032L, 13091040L, 3228404L, 56317L,
+    };
+
+    /** 高精度档：whisper small int8，encoder 加 decoder 两个大件。 */
+    public static final String[] HQ_FINAL_FILES = {
+            "small-encoder.int8.onnx",
+            "small-decoder.int8.onnx",
+            "small-tokens.txt",
+    };
+    public static final long[] HQ_FINAL_SIZES = {112442483L, 262226114L, 816730L};
 
     public static final String STREAM_BASE_DEFAULT =
             "https://hf-mirror.com/csukuangfj/sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23/resolve/main/";
     public static final String SV_BASE_DEFAULT =
             "https://hf-mirror.com/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/";
-
-    public static final String STREAM_BASE_OFFICIAL =
-            "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23/resolve/main/";
-    public static final String SV_BASE_OFFICIAL =
-            "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/";
-
-    public static final long TOTAL = sum(STREAM_SIZES) + sum(SV_SIZES);
+    public static final String HQ_STREAM_BASE_DEFAULT =
+            "https://hf-mirror.com/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/main/";
+    public static final String HQ_FINAL_BASE_DEFAULT =
+            "https://hf-mirror.com/csukuangfj/sherpa-onnx-whisper-small/resolve/main/";
 
     public interface Listener {
         void onFile(int index, int total, String name);
@@ -69,40 +90,67 @@ public final class LocalModelManager {
     private LocalModelManager() {
     }
 
-    private static long sum(long[] v) {
-        long n = 0;
-        for (long x : v) n += x;
-        return n;
+    public static String tier(Context ctx) {
+        String t = Prefs.getString(ctx, Prefs.K_LOCAL_TIER, TIER_LIGHT);
+        return TIER_HQ.equals(t) ? TIER_HQ : TIER_LIGHT;
+    }
+
+    public static boolean isHq(Context ctx) {
+        return TIER_HQ.equals(tier(ctx));
+    }
+
+    public static String[] streamFiles(Context ctx) {
+        return isHq(ctx) ? HQ_STREAM_FILES : LIGHT_STREAM_FILES;
+    }
+
+    public static long[] streamSizes(Context ctx) {
+        return isHq(ctx) ? HQ_STREAM_SIZES : LIGHT_STREAM_SIZES;
+    }
+
+    public static String[] finalFiles(Context ctx) {
+        return isHq(ctx) ? HQ_FINAL_FILES : LIGHT_FINAL_FILES;
+    }
+
+    public static long[] finalSizes(Context ctx) {
+        return isHq(ctx) ? HQ_FINAL_SIZES : LIGHT_FINAL_SIZES;
+    }
+
+    public static String defaultStreamUrl(Context ctx) {
+        return isHq(ctx) ? HQ_STREAM_BASE_DEFAULT : STREAM_BASE_DEFAULT;
+    }
+
+    public static String defaultFinalUrl(Context ctx) {
+        return isHq(ctx) ? HQ_FINAL_BASE_DEFAULT : SV_BASE_DEFAULT;
     }
 
     public static File dir(Context ctx) {
-        File f = new File(ctx.getFilesDir(), STREAM_DIR);
+        String name = isHq(ctx) ? HQ_STREAM_DIR : STREAM_DIR;
+        File f = new File(ctx.getFilesDir(), name);
         if (!f.exists()) f.mkdirs();
         return f;
     }
 
-    public static File svDir(Context ctx) {
-        File f = new File(ctx.getFilesDir(), SV_DIR);
+    public static File finalDir(Context ctx) {
+        String name = isHq(ctx) ? HQ_FINAL_DIR : SV_DIR;
+        File f = new File(ctx.getFilesDir(), name);
         if (!f.exists()) f.mkdirs();
         return f;
     }
 
+    /** 流式模型地址，留空就用当前档的默认镜像。 */
     public static String baseUrl(Context ctx) {
         String v = Prefs.getString(ctx, Prefs.K_LOCAL_URL, "");
-        if (v == null || v.trim().isEmpty()) return STREAM_BASE_DEFAULT;
+        if (v == null || v.trim().isEmpty()) return defaultStreamUrl(ctx);
         v = v.trim();
-        if (!v.endsWith("/")) v = v + "/";
-        return v;
+        return v.endsWith("/") ? v : v + "/";
     }
 
-    /** 高精度模型默认也走同一个镜像域名，用户改的是 domain 前缀时跟着走。 */
-    public static String svBaseUrl(Context ctx) {
+    /** 终稿模型地址，留空就用当前档的默认镜像。 */
+    public static String finalBaseUrl(Context ctx) {
         String v = Prefs.getString(ctx, Prefs.K_LOCAL_URL_SV, "");
-        if (v != null && !v.trim().isEmpty()) {
-            v = v.trim();
-            return v.endsWith("/") ? v : v + "/";
-        }
-        return SV_BASE_DEFAULT;
+        if (v == null || v.trim().isEmpty()) return defaultFinalUrl(ctx);
+        v = v.trim();
+        return v.endsWith("/") ? v : v + "/";
     }
 
     private static boolean check(File dir, String[] files, long[] sizes) {
@@ -114,48 +162,68 @@ public final class LocalModelManager {
     }
 
     public static boolean streamReady(Context ctx) {
-        return check(dir(ctx), STREAM_FILES, STREAM_SIZES);
+        return check(dir(ctx), streamFiles(ctx), streamSizes(ctx));
     }
 
-    public static boolean svReady(Context ctx) {
-        return check(svDir(ctx), SV_FILES, SV_SIZES);
+    public static boolean finalReady(Context ctx) {
+        return check(finalDir(ctx), finalFiles(ctx), finalSizes(ctx));
     }
 
     /** 两套都在才算完全就位。 */
     public static boolean isReady(Context ctx) {
-        return streamReady(ctx) && svReady(ctx);
+        return streamReady(ctx) && finalReady(ctx);
+    }
+
+    public static long totalBytes(Context ctx) {
+        long n = 0;
+        for (long v : streamSizes(ctx)) n += v;
+        for (long v : finalSizes(ctx)) n += v;
+        return n;
     }
 
     private static long downloadedBytes(Context ctx) {
         long n = 0;
-        for (int i = 0; i < STREAM_FILES.length; i++) {
-            File f = new File(dir(ctx), STREAM_FILES[i]);
+        for (String name : streamFiles(ctx)) {
+            File f = new File(dir(ctx), name);
             if (f.exists()) n += f.length();
         }
-        for (int i = 0; i < SV_FILES.length; i++) {
-            File f = new File(svDir(ctx), SV_FILES[i]);
+        for (String name : finalFiles(ctx)) {
+            File f = new File(finalDir(ctx), name);
             if (f.exists()) n += f.length();
         }
         return n;
     }
 
+    public static String tierLabel(Context ctx) {
+        return isHq(ctx) ? "高精度档" : "轻量档";
+    }
+
+    public static String tierSummary(Context ctx) {
+        if (isHq(ctx)) {
+            return "双语流式预览 199MB，whisper small 终稿 364MB，共 " + mb(totalBytes(ctx))
+                    + "MB。中英混说更准，内存和速度都吃一点。";
+        }
+        return "流式小模型 24MB，SenseVoice 终稿 228MB，共 " + mb(totalBytes(ctx))
+                + "MB。省空间，中文为主。";
+    }
+
     public static String statusText(Context ctx) {
         if (isReady(ctx)) {
-            return "已下载，占用 " + mb(downloadedBytes(ctx)) + "MB";
+            return tierLabel(ctx) + "已下载，占用 " + mb(downloadedBytes(ctx)) + "MB";
         }
-        if (streamReady(ctx) && !svReady(ctx)) {
-            return "流式模型已就位，高精度模型还没下完";
+        if (streamReady(ctx) && !finalReady(ctx)) {
+            return "流式模型已就位，终稿模型还没下完";
         }
-        if (!streamReady(ctx) && svReady(ctx)) {
-            return "高精度模型已就位，流式模型还没下完";
+        if (!streamReady(ctx) && finalReady(ctx)) {
+            return "终稿模型已就位，流式模型还没下完";
         }
         long n = downloadedBytes(ctx);
-        if (n == 0) return "还没下载，一共约 " + mb(TOTAL) + "MB";
-        return "下载了 " + mb(n) + "MB / 约 " + mb(TOTAL) + "MB，没下完";
+        if (n == 0) return "还没下载，一共约 " + mb(totalBytes(ctx)) + "MB";
+        return "下载了 " + mb(n) + "MB / 约 " + mb(totalBytes(ctx)) + "MB，没下完";
     }
 
     private static String mb(long bytes) {
-        return String.format(java.util.Locale.CHINA, "%.0f", bytes / 1024f / 1024f);
+        return String.format(Locale.CHINA, "%.0f", bytes / 1024f / 1024f);
     }
 
     /** 同步下载，调用方自己开线程。已经完整下好的文件会跳过。 */
@@ -166,56 +234,42 @@ public final class LocalModelManager {
                 .retryOnConnectionFailure(true)
                 .build();
 
-        long done = definitelyDone(ctx);
-        int index = 0;
-        int total = STREAM_FILES.length + SV_FILES.length;
+        String[] sf = streamFiles(ctx);
+        long[] ss = streamSizes(ctx);
+        String[] ff = finalFiles(ctx);
+        long[] fs = finalSizes(ctx);
+        long total = totalBytes(ctx);
 
-        // 先流式，后高精度，顺序不影响使用
-        index = fetch(client, dir(ctx), baseUrl(ctx), STREAM_FILES, STREAM_SIZES,
-                index, total, done, listener);
+        // 先流式，后终稿，顺序不影响使用
+        int index = fetch(client, dir(ctx), baseUrl(ctx), sf, ss,
+                0, sf.length + ff.length, 0, total, listener);
         if (index < 0) return;
-        done = preDone(ctx, true);
-        index = fetch(client, svDir(ctx), svBaseUrl(ctx), SV_FILES, SV_SIZES,
-                total - SV_FILES.length, total, done, listener);
+        long done = 0;
+        for (String name : sf) {
+            File f = new File(dir(ctx), name);
+            if (f.exists()) done += f.length();
+        }
+        index = fetch(client, finalDir(ctx), finalBaseUrl(ctx), ff, fs,
+                sf.length, sf.length + ff.length, done, total, listener);
         if (index < 0) return;
         listener.onDone();
     }
 
-    private static long definitelyDone(Context ctx) {
-        return 0;
-    }
-
-    private static long preDone(Context ctx, boolean stream) {
-        long n = 0;
-        if (stream) {
-            for (int i = 0; i < STREAM_FILES.length; i++) {
-                File f = new File(dir(ctx), STREAM_FILES[i]);
-                if (f.exists()) n += f.length();
-            }
-        } else {
-            for (int i = 0; i < SV_FILES.length; i++) {
-                File f = new File(svDir(ctx), SV_FILES[i]);
-                if (f.exists()) n += f.length();
-            }
-        }
-        return n;
-    }
-
     /** 返回下一个要处理的下标，出错返回 -1。 */
     private static int fetch(OkHttpClient client, File dir, String base,
-                             String[] files, long[] sizes, int index, int total,
-                             long alreadyDone, Listener listener) {
+                             String[] files, long[] sizes, int index, int totalFiles,
+                             long alreadyDone, long totalBytes, Listener listener) {
         long done = alreadyDone;
         for (int i = 0; i < files.length; i++) {
             String name = files[i];
             File out = new File(dir, name);
             if (out.exists() && out.length() >= sizes[i] * 0.9) {
                 done += out.length();
-                listener.onProgress(done / (float) TOTAL, done, TOTAL);
+                listener.onProgress(done / (float) totalBytes, done, totalBytes);
                 index++;
                 continue;
             }
-            listener.onFile(index, total, name);
+            listener.onFile(index, totalFiles, name);
             File tmp = new File(dir, name + ".part");
             long fileDone = 0;
             try {
@@ -232,7 +286,7 @@ public final class LocalModelManager {
                             fos.write(buf, 0, n);
                             fileDone += n;
                             long shown = done + fileDone;
-                            listener.onProgress(shown / (float) TOTAL, shown, TOTAL);
+                            listener.onProgress(shown / (float) totalBytes, shown, totalBytes);
                             if (fileDone > sizes[i] * 1.5f) break;
                         }
                         fos.flush();

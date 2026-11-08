@@ -40,6 +40,8 @@ public final class Prefs {
     public static final String K_LOCAL_URL = "local_model_url";
     /** 高精度模型的下载地址。 */
     public static final String K_LOCAL_URL_SV = "local_model_url_sv";
+    /** 本地模型规格，light 轻量档，hq 高精度档。 */
+    public static final String K_LOCAL_TIER = "local_model_tier";
     /** 主题：auto 跟随手机，light 白色，dark 黑色。 */
     public static final String K_THEME = "theme_mode";
 

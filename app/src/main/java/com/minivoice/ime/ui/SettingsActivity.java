@@ -14,6 +14,7 @@ import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
+import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -77,6 +78,13 @@ public class SettingsActivity extends AppCompatActivity {
     private TextView tvLocalStatus;
     private EditText etLocalUrl;
     private Button btnDownload;
+    private RadioGroup rgModelTier;
+    private RadioButton rbTierLight;
+    private RadioButton rbTierHq;
+    private EditText etLocalUrlSv;
+    private TextView tvModelSummary;
+    /** 程序自己改选中状态时不让监听回调跑，否则会把新档的地址又清一遍。 */
+    private boolean bindingTier = false;
     private Button btnLocalTest;
     private android.view.View groupCloud;
     private android.view.View groupLocal;
@@ -132,6 +140,25 @@ public class SettingsActivity extends AppCompatActivity {
         etLocalUrl = findViewById(R.id.et_local_url);
         btnDownload = findViewById(R.id.btn_download);
         btnLocalTest = findViewById(R.id.btn_local_test);
+        rgModelTier = findViewById(R.id.rg_model_tier);
+        rbTierLight = findViewById(R.id.rb_tier_light);
+        rbTierHq = findViewById(R.id.rb_tier_hq);
+        etLocalUrlSv = findViewById(R.id.et_local_url_sv);
+        tvModelSummary = findViewById(R.id.tv_model_summary);
+        if (rgModelTier != null) {
+            rgModelTier.setOnCheckedChangeListener((group, checkedId) -> {
+                if (bindingTier) return;
+                boolean hq = checkedId == R.id.rb_tier_hq;
+                Prefs.putString(this, Prefs.K_LOCAL_TIER,
+                        hq ? LocalModelManager.TIER_HQ : LocalModelManager.TIER_LIGHT);
+                // 换档就把手填的地址清掉，回到新档的默认镜像，省得拿旧地址下新模型
+                Prefs.putString(this, Prefs.K_LOCAL_URL, "");
+                Prefs.putString(this, Prefs.K_LOCAL_URL_SV, "");
+                etLocalUrl.setText("");
+                etLocalUrlSv.setText("");
+                refreshModelUi();
+            });
+        }
         groupCloud = findViewById(R.id.group_cloud);
         groupLocal = findViewById(R.id.group_local);
 
@@ -236,8 +263,11 @@ public class SettingsActivity extends AppCompatActivity {
         etFilter.setText(Prefs.getString(this, Prefs.K_FILTER, "嗯,呃,啊,那个,就是"));
         swPreferBt.setChecked(Prefs.getBool(this, Prefs.K_PREFER_BT, true));
         swPolish.setChecked(c.polish);
-        etLocalUrl.setText(Prefs.getString(this, Prefs.K_LOCAL_URL, LocalModelManager.STREAM_BASE_DEFAULT));
-        refreshLocalStatus();
+        etLocalUrl.setText(Prefs.getString(this, Prefs.K_LOCAL_URL, ""));
+        if (etLocalUrlSv != null) {
+            etLocalUrlSv.setText(Prefs.getString(this, Prefs.K_LOCAL_URL_SV, ""));
+        }
+        refreshModelUi();
     }
 
     /** 云端 / 本地切换，点一下就生效，不用等保存。 */
@@ -258,6 +288,20 @@ public class SettingsActivity extends AppCompatActivity {
         refreshLocalStatus();
     }
 
+    /** 把规格、说明文字、两个地址框的提示都刷成当前档的样子。 */
+    private void refreshModelUi() {
+        if (tvModelSummary == null) return;
+        boolean hq = LocalModelManager.isHq(this);
+        bindingTier = true;
+        rbTierLight.setChecked(!hq);
+        rbTierHq.setChecked(hq);
+        bindingTier = false;
+        tvModelSummary.setText(LocalModelManager.tierSummary(this));
+        etLocalUrl.setHint(LocalModelManager.defaultStreamUrl(this));
+        etLocalUrlSv.setHint(LocalModelManager.defaultFinalUrl(this));
+        refreshLocalStatus();
+    }
+
     private void refreshLocalStatus() {
         if (tvLocalStatus == null) return;
         if (LocalModelManager.isReady(this)) {
@@ -270,9 +314,8 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void downloadModel() {
-        String url = etLocalUrl.getText().toString().trim();
-        Prefs.putString(this, Prefs.K_LOCAL_URL,
-                url.isEmpty() ? LocalModelManager.STREAM_BASE_DEFAULT : url);
+        Prefs.putString(this, Prefs.K_LOCAL_URL, etLocalUrl.getText().toString().trim());
+        Prefs.putString(this, Prefs.K_LOCAL_URL_SV, etLocalUrlSv.getText().toString().trim());
         btnDownload.setEnabled(false);
         btnLocalTest.setEnabled(false);
         tvLocalStatus.setText("准备下载…");
@@ -412,9 +455,8 @@ public class SettingsActivity extends AppCompatActivity {
         Prefs.putString(this, Prefs.K_PUNCT, etPunct.getText().toString().trim());
         Prefs.putString(this, Prefs.K_FILTER, etFilter.getText().toString().trim());
         Prefs.putBool(this, Prefs.K_PREFER_BT, swPreferBt.isChecked());
-        String localUrl = etLocalUrl.getText().toString().trim();
-        Prefs.putString(this, Prefs.K_LOCAL_URL,
-                localUrl.isEmpty() ? LocalModelManager.STREAM_BASE_DEFAULT : localUrl);
+        Prefs.putString(this, Prefs.K_LOCAL_URL, etLocalUrl.getText().toString().trim());
+        Prefs.putString(this, Prefs.K_LOCAL_URL_SV, etLocalUrlSv.getText().toString().trim());
         refreshLocalStatus();
         Prefs.putString(this, Prefs.K_THEME, ThemeUtil.mode(this));
         Prefs.markPendingSync(this, true);

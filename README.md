@@ -62,12 +62,12 @@ bailian.key=sk-ws-你自己的key
 
 ## 本地模型
 
-设置页里可以自己下，走 hf-mirror 镜像：
+设置页里两档规格，自己下，默认走 hf-mirror 镜像：
 
-- 流式预览：sherpa-onnx streaming zipformer 中文 14M，约 24MB
-- 终稿重算：SenseVoice int8，约 239MB，带标点和数字转换
+- 轻量档，约 253MB：流式预览用 streaming zipformer 中文 14M，终稿用 SenseVoice int8，中文带标点和数字转换
+- 高精度档，约 547MB：流式预览换成中英双语 zipformer，终稿换成 whisper small int8。英文和中英混说准得多，代价是内存和速度都吃一点
 
-模型放 `filesDir`，不放进 APK，所以安装包本身很小。
+两档放在不同目录，来回切不用重新下载。地址框留空就用预设镜像，填自己的地址也能下，只要文件名跟这一档约定的一致。模型放 `filesDir`，不放进 APK，所以安装包本身很小。
 
 ## 代码在哪
 

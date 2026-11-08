@@ -13,6 +13,7 @@ import com.k2fsa.sherpa.onnx.OfflineRecognizer;
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig;
 import com.k2fsa.sherpa.onnx.OfflineRecognizerResult;
 import com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig;
+import com.k2fsa.sherpa.onnx.OfflineWhisperModelConfig;
 import com.k2fsa.sherpa.onnx.OfflineStream;
 import com.k2fsa.sherpa.onnx.OnlineModelConfig;
 import com.k2fsa.sherpa.onnx.OnlineRecognizer;
@@ -93,7 +94,7 @@ public class LocalAsrEngine implements AsrEngine {
             }
             // 高精度模型加载慢一点，放后面，不影响边说边出字
             try {
-                if (LocalModelManager.svReady(ctx)) {
+                if (LocalModelManager.finalReady(ctx)) {
                     OfflineRecognizer fr = buildFinalRecognizer();
                     synchronized (lock) {
                         if (canceled) {
@@ -111,14 +112,15 @@ public class LocalAsrEngine implements AsrEngine {
 
     private OnlineRecognizer buildStreamRecognizer() {
         File dir = LocalModelManager.dir(ctx);
+        String[] files = LocalModelManager.streamFiles(ctx);
         OnlineTransducerModelConfig transducer = OnlineTransducerModelConfig.builder()
-                .setEncoder(new File(dir, LocalModelManager.STREAM_FILES[0]).getAbsolutePath())
-                .setDecoder(new File(dir, LocalModelManager.STREAM_FILES[1]).getAbsolutePath())
-                .setJoiner(new File(dir, LocalModelManager.STREAM_FILES[2]).getAbsolutePath())
+                .setEncoder(new File(dir, files[0]).getAbsolutePath())
+                .setDecoder(new File(dir, files[1]).getAbsolutePath())
+                .setJoiner(new File(dir, files[2]).getAbsolutePath())
                 .build();
         OnlineModelConfig modelConfig = OnlineModelConfig.builder()
                 .setTransducer(transducer)
-                .setTokens(new File(dir, LocalModelManager.STREAM_FILES[3]).getAbsolutePath())
+                .setTokens(new File(dir, files[3]).getAbsolutePath())
                 .setNumThreads(2)
                 .setModelType("zipformer")
                 .setDebug(false)
@@ -155,15 +157,53 @@ public class LocalAsrEngine implements AsrEngine {
     }
 
     private OfflineRecognizer buildFinalRecognizer() {
-        File dir = LocalModelManager.svDir(ctx);
+        if (LocalModelManager.isHq(ctx)) return buildWhisperRecognizer();
+        return buildSenseVoiceRecognizer();
+    }
+
+    /**
+     * 轻量档终稿用 SenseVoice。
+     * language 一定要给 auto，写死 zh 的话说英文会被当成中文谐音，
+     * get up 会被拼成 Gt upub 这种鬼东西。
+     */
+    private OfflineRecognizer buildSenseVoiceRecognizer() {
+        File dir = LocalModelManager.finalDir(ctx);
+        String[] files = LocalModelManager.finalFiles(ctx);
         OfflineSenseVoiceModelConfig sv = OfflineSenseVoiceModelConfig.builder()
-                .setModel(new File(dir, LocalModelManager.SV_FILES[0]).getAbsolutePath())
-                .setLanguage("zh")
+                .setModel(new File(dir, files[0]).getAbsolutePath())
+                .setLanguage("auto")
                 .setInverseTextNormalization(true)
                 .build();
         OfflineModelConfig modelConfig = OfflineModelConfig.builder()
                 .setSenseVoice(sv)
-                .setTokens(new File(dir, LocalModelManager.SV_FILES[1]).getAbsolutePath())
+                .setTokens(new File(dir, files[1]).getAbsolutePath())
+                .setNumThreads(2)
+                .setDebug(false)
+                .build();
+        OfflineRecognizerConfig config = OfflineRecognizerConfig.builder()
+                .setOfflineModelConfig(modelConfig)
+                .setDecodingMethod("greedy_search")
+                .build();
+        return new OfflineRecognizer(config);
+    }
+
+    /**
+     * 高精度档终稿用 whisper small。英文是它的强项，中文也不差。
+     * language 留空让它自己判，中英混说的时候才不会把英文硬翻成中文。
+     */
+    private OfflineRecognizer buildWhisperRecognizer() {
+        File dir = LocalModelManager.finalDir(ctx);
+        String[] files = LocalModelManager.finalFiles(ctx);
+        OfflineWhisperModelConfig whisper = OfflineWhisperModelConfig.builder()
+                .setEncoder(new File(dir, files[0]).getAbsolutePath())
+                .setDecoder(new File(dir, files[1]).getAbsolutePath())
+                .setLanguage("")
+                .setTask("transcribe")
+                .setTailPaddings(1000)
+                .build();
+        OfflineModelConfig modelConfig = OfflineModelConfig.builder()
+                .setWhisper(whisper)
+                .setTokens(new File(dir, files[2]).getAbsolutePath())
                 .setNumThreads(2)
                 .setDebug(false)
                 .build();

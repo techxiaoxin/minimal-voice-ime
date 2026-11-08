@@ -326,17 +326,72 @@
                             <TextView
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:text="模型：SenseVoice 中文高精度 + 流式小模型"
+                                android:text="模型规格"
                                 android:textColor="@color/text_primary"
                                 android:textSize="12sp" />
+
+                            <RadioGroup
+                                android:id="@+id/rg_model_tier"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:orientation="horizontal">
+
+                                <RadioButton
+                                    android:id="@+id/rb_tier_light"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:buttonTint="@color/text_primary"
+                                    android:paddingStart="0dp"
+                                    android:paddingEnd="4dp"
+                                    android:text="轻量 253MB"
+                                    android:textColor="@color/text_primary"
+                                    android:textSize="12sp" />
+
+                                <RadioButton
+                                    android:id="@+id/rb_tier_hq"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:buttonTint="@color/text_primary"
+                                    android:paddingStart="0dp"
+                                    android:paddingEnd="4dp"
+                                    android:text="高精度 547MB"
+                                    android:textColor="@color/text_primary"
+                                    android:textSize="12sp" />
+                            </RadioGroup>
+
+                            <TextView
+                                android:id="@+id/tv_model_summary"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:lineSpacingExtra="2dp"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="11sp" />
 
                             <EditText
                                 android:id="@+id/et_local_url"
                                 android:layout_width="match_parent"
                                 android:layout_height="40dp"
-                                android:layout_marginTop="4dp"
+                                android:layout_marginTop="6dp"
                                 android:background="@drawable/bg_input"
-                                android:hint="https://…/resolve/main/"
+                                android:importantForAutofill="no"
+                                android:inputType="textUri"
+                                android:paddingStart="10dp"
+                                android:paddingEnd="10dp"
+                                android:singleLine="true"
+                                android:textColor="@color/text_primary"
+                                android:textColorHint="@color/text_hint"
+                                android:textSize="12sp" />
+
+                            <EditText
+                                android:id="@+id/et_local_url_sv"
+                                android:layout_width="match_parent"
+                                android:layout_height="40dp"
+                                android:layout_marginTop="6dp"
+                                android:background="@drawable/bg_input"
                                 android:importantForAutofill="no"
                                 android:inputType="textUri"
                                 android:paddingStart="10dp"
@@ -351,7 +406,7 @@
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="6dp"
                                 android:lineSpacingExtra="2dp"
-                                android:text="流式小模型 24MB，高精度 228MB，共 263MB。重下会跳过已完成的文件。"
+                                android:text="上面是流式预览模型的地址，下面是终稿模型的地址。留空就用预设镜像。换别的模型只要文件名跟这一档一致就能下。重下会跳过已完成的文件。"
                                 android:textColor="@color/text_secondary"
                                 android:textSize="11sp" />
 
