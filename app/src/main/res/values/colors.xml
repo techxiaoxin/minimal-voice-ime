@@ -23,4 +23,6 @@
     <color name="success">#16A34A</color>
     <color name="warn">#D97706</color>
     <color name="chip_stroke">#D3DAE4</color>
+    <color name="quick_bar_bg">#DCE4F2</color>
+    <color name="quick_bar_stroke">#B9C6DA</color>
 </resources>

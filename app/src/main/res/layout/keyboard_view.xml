@@ -194,11 +194,13 @@
         <LinearLayout
             android:id="@+id/ll_quick"
             android:layout_width="wrap_content"
-            android:layout_height="match_parent"
+            android:layout_height="52dp"
             android:layout_gravity="center_vertical|start"
             android:layout_marginStart="53dp"
-            android:background="@color/panel_bg"
+            android:background="@drawable/bg_quick_bar"
             android:gravity="center_vertical"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
             android:orientation="horizontal"
             android:visibility="gone">
 
@@ -209,7 +211,7 @@
                 android:background="@drawable/bg_btn"
                 android:contentDescription="@string/quick_switch_ime"
                 android:scaleType="centerInside"
-                android:src="@drawable/ic_grid"
+                android:src="@drawable/ic_globe"
                 app:tint="@color/text_primary" />
 
             <ImageButton
