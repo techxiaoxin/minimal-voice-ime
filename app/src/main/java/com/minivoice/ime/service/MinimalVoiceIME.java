@@ -769,33 +769,11 @@ public class MinimalVoiceIME extends InputMethodService {
                 InputConnection ic = getCurrentInputConnection();
                 if (ic != null) ic.setComposingText(raw, 1);
 
-                // 本地识别也能过一遍 AI 整理，思路是把识别好的文字交给云端模型规整，
-                // 联网失败就退回本地清理，不至于卡住不出字
+                // 本地模式不联网，整理只用本地规则：SenseVoice 带的标点加上词表修正，
+                // 想要大模型那种改写，得切到云端模式
                 if (AsrConfig.PROTOCOL_LOCAL.equals(config.protocol)) {
-                    if (config.polish) {
-                        refreshStatus("整理中…");
-                        startPolishProgress();
-                        TextPolisher.polish(MinimalVoiceIME.this, raw, result -> {
-                            waiting = false;
-                            showBusy(false);
-                            String base = (result == null || result.isEmpty())
-                                    ? TextPolisher.polishLocal(raw) : result;
-                            String text2 = TermFix.apply(MinimalVoiceIME.this, base);
-                            InputConnection c2 = getCurrentInputConnection();
-                            if (c2 != null) {
-                                c2.setComposingText(text2, 1);
-                                c2.finishComposingText();
-                            }
-                            hasComposing = false;
-                            refreshStatus(isSpaceMode() ? getString(R.string.voice_tap_space)
-                                    : getString(R.string.voice_tap_send));
-                            flashAccent(false);
-                            lastVoiceDoneAt = SystemClock.uptimeMillis();
-                            flashDone();
-                        });
-                        return;
-                    }
-                    String done = config.polish ? TextPolisher.polishLocal(raw) : raw;
+                    String base = config.polish ? TextPolisher.polishLocal(raw) : raw;
+                    String done = TermFix.apply(MinimalVoiceIME.this, base);
                     if (!done.equals(raw) && ic != null) ic.setComposingText(done, 1);
                     waiting = false;
                     showBusy(false);
