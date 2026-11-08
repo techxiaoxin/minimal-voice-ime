@@ -153,7 +153,7 @@ public class SettingsActivity extends AppCompatActivity {
                 Prefs.putString(this, Prefs.K_LOCAL_URL, "");
                 Prefs.putString(this, Prefs.K_LOCAL_URL_SV, "");
                 refreshModelUi();
-                etLocalUrl.setText(LocalModelManager.defaultFinalUrl(this));
+                etLocalUrl.setText(targetUrl());
             });
         }
         groupCloud = findViewById(R.id.group_cloud);
@@ -261,7 +261,7 @@ public class SettingsActivity extends AppCompatActivity {
         swPreferBt.setChecked(Prefs.getBool(this, Prefs.K_PREFER_BT, true));
         swPolish.setChecked(c.polish);
         String savedUrl = Prefs.getString(this, Prefs.K_LOCAL_URL_SV, "");
-        etLocalUrl.setText(savedUrl.isEmpty() ? LocalModelManager.defaultFinalUrl(this) : savedUrl);
+        etLocalUrl.setText(savedUrl.isEmpty() ? targetUrl() : savedUrl);
         refreshModelUi();
     }
 
@@ -292,8 +292,15 @@ public class SettingsActivity extends AppCompatActivity {
         rbTierHq.setChecked(hq);
         bindingTier = false;
         tvModelSummary.setText(LocalModelManager.tierSummary(this));
-        etLocalUrl.setHint(LocalModelManager.defaultFinalUrl(this));
+        etLocalUrl.setHint(targetUrl());
         refreshLocalStatus();
+    }
+
+    /** 地址框管谁：标准档是唯一的那个模型，高精度档是终稿模型。 */
+    private String targetUrl() {
+        return LocalModelManager.isHq(this)
+                ? LocalModelManager.defaultFinalUrl(this)
+                : LocalModelManager.defaultStreamUrl(this);
     }
 
     private void refreshLocalStatus() {
@@ -305,6 +312,38 @@ public class SettingsActivity extends AppCompatActivity {
             tvLocalStatus.setText("状态：" + LocalModelManager.statusText(this));
             btnDownload.setText("下载模型");
         }
+    }
+
+    /**
+     * 下载完拿模型真加载一遍。能起来就自动切到本地用这个模型，
+     * 起不来就提示用户，多半是地址指的不是语音识别模型。
+     */
+    private void checkModelAndSwitch() {
+        tvLocalStatus.setText("下载完了，正在检查模型…");
+        new Thread(() -> {
+            String err = LocalAsrEngine.probe(this);
+            runOnUiThread(() -> {
+                refreshLocalStatus();
+                if (err == null) {
+                    Prefs.putString(this, Prefs.K_PROTOCOL, AsrConfig.PROTOCOL_LOCAL);
+                    renderMode(true);
+                    Toast.makeText(this, "模型没问题，已经切到本地识别", Toast.LENGTH_SHORT).show();
+                } else {
+                    showBadModelDialog(err);
+                }
+            });
+        }).start();
+    }
+
+    private void showBadModelDialog(String err) {
+        String shortErr = err.length() > 60 ? err.substring(0, 60) + "…" : err;
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("这个模型用不了")
+                .setMessage("文件下下来了，但加载不起来，多半不是语音识别模型。\n\n"
+                        + "请确认地址指向 sherpa-onnx 的语音识别模型，并且文件名跟本档约定的一致。"
+                        + "普通的大模型、图片模型、TTS 模型都不行。\n\n错误信息：" + shortErr)
+                .setPositiveButton("知道了", null)
+                .show();
     }
 
     private void downloadModel() {
@@ -332,7 +371,7 @@ public class SettingsActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     btnDownload.setEnabled(true);
                     btnLocalTest.setEnabled(true);
-                    refreshLocalStatus();
+                    checkModelAndSwitch();
                     Toast.makeText(SettingsActivity.this, "模型下载完成，可以切到本地用了",
                             Toast.LENGTH_SHORT).show();
                 });

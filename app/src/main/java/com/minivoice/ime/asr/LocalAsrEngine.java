@@ -12,7 +12,6 @@ import com.k2fsa.sherpa.onnx.OfflineModelConfig;
 import com.k2fsa.sherpa.onnx.OfflineRecognizer;
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig;
 import com.k2fsa.sherpa.onnx.OfflineRecognizerResult;
-import com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig;
 import com.k2fsa.sherpa.onnx.OfflineWhisperModelConfig;
 import com.k2fsa.sherpa.onnx.OfflineStream;
 import com.k2fsa.sherpa.onnx.OnlineModelConfig;
@@ -32,7 +31,7 @@ import java.util.concurrent.Executors;
  * 本地识别，两段式。
  *
  * 说话时用小模型流式解码，边说边把字推到输入框；
- * 松手后用 SenseVoice 把这整段音频重算一遍，出带标点的准确终稿。
+ * 标准档只有一个中英双语流式模型，预览就是终稿；高精度档松手后再用 whisper small 重算一遍。
  * 两个模型都在手机上算，不联网。
  */
 public class LocalAsrEngine implements AsrEngine {
@@ -96,6 +95,7 @@ public class LocalAsrEngine implements AsrEngine {
             try {
                 if (LocalModelManager.finalReady(ctx)) {
                     OfflineRecognizer fr = buildFinalRecognizer();
+                    if (fr == null) return;
                     synchronized (lock) {
                         if (canceled) {
                             fr.release();
@@ -157,34 +157,9 @@ public class LocalAsrEngine implements AsrEngine {
     }
 
     private OfflineRecognizer buildFinalRecognizer() {
-        if (LocalModelManager.isHq(ctx)) return buildWhisperRecognizer();
-        return buildSenseVoiceRecognizer();
-    }
-
-    /**
-     * 轻量档终稿用 SenseVoice。
-     * language 一定要给 auto，写死 zh 的话说英文会被当成中文谐音，
-     * get up 会被拼成 Gt upub 这种鬼东西。
-     */
-    private OfflineRecognizer buildSenseVoiceRecognizer() {
-        File dir = LocalModelManager.finalDir(ctx);
-        String[] files = LocalModelManager.finalFiles(ctx);
-        OfflineSenseVoiceModelConfig sv = OfflineSenseVoiceModelConfig.builder()
-                .setModel(new File(dir, files[0]).getAbsolutePath())
-                .setLanguage("auto")
-                .setInverseTextNormalization(true)
-                .build();
-        OfflineModelConfig modelConfig = OfflineModelConfig.builder()
-                .setSenseVoice(sv)
-                .setTokens(new File(dir, files[1]).getAbsolutePath())
-                .setNumThreads(2)
-                .setDebug(false)
-                .build();
-        OfflineRecognizerConfig config = OfflineRecognizerConfig.builder()
-                .setOfflineModelConfig(modelConfig)
-                .setDecodingMethod("greedy_search")
-                .build();
-        return new OfflineRecognizer(config);
+        // 标准档只有一个双语流式模型，预览就是终稿，不再跑第二遍
+        if (!LocalModelManager.isHq(ctx)) return null;
+        return buildWhisperRecognizer();
     }
 
     /**
@@ -375,5 +350,25 @@ public class LocalAsrEngine implements AsrEngine {
             out[i] = (lo | hi) / 32768f;
         }
         return out;
+    }
+
+    /**
+     * 拿下载好的文件真加载一遍，能起来才算模型没问题。
+     * 返回 null 表示正常，否则返回错误描述。给设置页下载完做自检用。
+     */
+    public static String probe(Context ctx) {
+        try {
+            LocalAsrEngine e = new LocalAsrEngine(ctx);
+            OnlineRecognizer online = e.buildStreamRecognizer();
+            online.release();
+            if (LocalModelManager.isHq(ctx) && LocalModelManager.finalReady(ctx)) {
+                OfflineRecognizer off = e.buildWhisperRecognizer();
+                off.release();
+            }
+            return null;
+        } catch (Throwable t) {
+            String m = t.getMessage();
+            return m == null ? t.getClass().getSimpleName() : m;
+        }
     }
 }

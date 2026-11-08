@@ -40,7 +40,8 @@
         <activity
             android:name=".ui.SettingsActivity"
             android:exported="false"
-            android:label="@string/settings_title" />
+            android:label="@string/settings_title"
+            android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".ui.PermissionActivity"

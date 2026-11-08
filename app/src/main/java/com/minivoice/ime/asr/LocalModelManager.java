@@ -26,41 +26,24 @@ public final class LocalModelManager {
 
     public static final String TIER_LIGHT = "light";
     public static final String TIER_HQ = "hq";
+    private static final String[] EMPTY_FILES = new String[0];
+    private static final long[] EMPTY_SIZES = new long[0];
 
-    /** 轻量档的两个目录，沿用老名字，已经下过的用户不用重下。 */
-    public static final String STREAM_DIR = "sherpa-zh14m";
-    public static final String SV_DIR = "sherpa-sensevoice";
-    /** 高精度档单独放两个目录，两档可以共存，来回切不用重下。 */
-    public static final String HQ_STREAM_DIR = "sherpa-zh-en-stream";
+    /** 预览模型两档共用，中英双语，下好一次切档就不用再下。 */
+    public static final String STREAM_DIR = "sherpa-zh-en-stream";
+    /** 终稿模型只有高精度档才有，单独一个目录，和预览模型共存。 */
     public static final String HQ_FINAL_DIR = "sherpa-whisper-small";
 
-    /** 轻量档：流式小模型四个文件。 */
-    public static final String[] LIGHT_STREAM_FILES = {
+    /** 预览模型：中英双语流式 zipformer，int8，约 199MB。14M 那个纯中文词表同款文件结构。 */
+    public static final String[] STREAM_FILES = {
             "encoder-epoch-99-avg-1.int8.onnx",
             "decoder-epoch-99-avg-1.int8.onnx",
             "joiner-epoch-99-avg-1.int8.onnx",
             "tokens.txt",
     };
-    public static final long[] LIGHT_STREAM_SIZES = {
-            21621684L, 1888682L, 1795562L, 48697L,
-    };
+    public static final long[] STREAM_SIZES = {181895032L, 13091040L, 3228404L, 56317L};
 
-    /** 轻量档：SenseVoice int8，中文带标点。 */
-    public static final String[] LIGHT_FINAL_FILES = {"model.int8.onnx", "tokens.txt"};
-    public static final long[] LIGHT_FINAL_SIZES = {239233841L, 315894L};
-
-    /** 高精度档：中英双语流式模型，文件名跟轻量档一模一样，只是内容不同。 */
-    public static final String[] HQ_STREAM_FILES = {
-            "encoder-epoch-99-avg-1.int8.onnx",
-            "decoder-epoch-99-avg-1.int8.onnx",
-            "joiner-epoch-99-avg-1.int8.onnx",
-            "tokens.txt",
-    };
-    public static final long[] HQ_STREAM_SIZES = {
-            181895032L, 13091040L, 3228404L, 56317L,
-    };
-
-    /** 高精度档：whisper small int8，encoder 加 decoder 两个大件。 */
+    /** 高精度档才有的终稿模型：whisper small int8，encoder 加 decoder 两个大件。 */
     public static final String[] HQ_FINAL_FILES = {
             "small-encoder.int8.onnx",
             "small-decoder.int8.onnx",
@@ -69,10 +52,6 @@ public final class LocalModelManager {
     public static final long[] HQ_FINAL_SIZES = {112442483L, 262226114L, 816730L};
 
     public static final String STREAM_BASE_DEFAULT =
-            "https://hf-mirror.com/csukuangfj/sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23/resolve/main/";
-    public static final String SV_BASE_DEFAULT =
-            "https://hf-mirror.com/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/";
-    public static final String HQ_STREAM_BASE_DEFAULT =
             "https://hf-mirror.com/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/main/";
     public static final String HQ_FINAL_BASE_DEFAULT =
             "https://hf-mirror.com/csukuangfj/sherpa-onnx-whisper-small/resolve/main/";
@@ -100,52 +79,59 @@ public final class LocalModelManager {
     }
 
     public static String[] streamFiles(Context ctx) {
-        return isHq(ctx) ? HQ_STREAM_FILES : LIGHT_STREAM_FILES;
+        return STREAM_FILES;
     }
 
     public static long[] streamSizes(Context ctx) {
-        return isHq(ctx) ? HQ_STREAM_SIZES : LIGHT_STREAM_SIZES;
+        return STREAM_SIZES;
     }
 
+    /** 标准档没有终稿模型，预览模型就干全部的活。 */
     public static String[] finalFiles(Context ctx) {
-        return isHq(ctx) ? HQ_FINAL_FILES : LIGHT_FINAL_FILES;
+        return isHq(ctx) ? HQ_FINAL_FILES : EMPTY_FILES;
     }
 
     public static long[] finalSizes(Context ctx) {
-        return isHq(ctx) ? HQ_FINAL_SIZES : LIGHT_FINAL_SIZES;
+        return isHq(ctx) ? HQ_FINAL_SIZES : EMPTY_SIZES;
     }
 
     public static String defaultStreamUrl(Context ctx) {
-        return isHq(ctx) ? HQ_STREAM_BASE_DEFAULT : STREAM_BASE_DEFAULT;
+        return STREAM_BASE_DEFAULT;
     }
 
     public static String defaultFinalUrl(Context ctx) {
-        return isHq(ctx) ? HQ_FINAL_BASE_DEFAULT : SV_BASE_DEFAULT;
+        return isHq(ctx) ? HQ_FINAL_BASE_DEFAULT : "";
     }
 
     public static File dir(Context ctx) {
-        String name = isHq(ctx) ? HQ_STREAM_DIR : STREAM_DIR;
-        File f = new File(ctx.getFilesDir(), name);
+        File f = new File(ctx.getFilesDir(), STREAM_DIR);
         if (!f.exists()) f.mkdirs();
         return f;
     }
 
     public static File finalDir(Context ctx) {
-        String name = isHq(ctx) ? HQ_FINAL_DIR : SV_DIR;
-        File f = new File(ctx.getFilesDir(), name);
+        File f = new File(ctx.getFilesDir(), HQ_FINAL_DIR);
         if (!f.exists()) f.mkdirs();
         return f;
     }
 
-    /** 预览模型地址固定跟档位走，不开放修改，界面只留一个地址框。 */
+    /**
+     * 标准档只有一个模型，用户填的地址就替换这个预览模型。
+     * 高精度档预览模型固定走预设，用户填的地址管终稿模型。
+     */
     public static String baseUrl(Context ctx) {
-        return defaultStreamUrl(ctx);
+        if (isHq(ctx)) return defaultStreamUrl(ctx);
+        return customOr(ctx, defaultStreamUrl(ctx));
     }
 
-    /** 终稿模型地址，留空就用当前档的默认镜像。 */
+    /** 高精度档的终稿模型地址，留空就用预设镜像。 */
     public static String finalBaseUrl(Context ctx) {
+        return customOr(ctx, defaultFinalUrl(ctx));
+    }
+
+    private static String customOr(Context ctx, String def) {
         String v = Prefs.getString(ctx, Prefs.K_LOCAL_URL_SV, "");
-        if (v == null || v.trim().isEmpty()) return defaultFinalUrl(ctx);
+        if (v == null || v.trim().isEmpty()) return def;
         v = v.trim();
         return v.endsWith("/") ? v : v + "/";
     }
@@ -163,7 +149,9 @@ public final class LocalModelManager {
     }
 
     public static boolean finalReady(Context ctx) {
-        return check(finalDir(ctx), finalFiles(ctx), finalSizes(ctx));
+        String[] files = finalFiles(ctx);
+        if (files.length == 0) return true;
+        return check(finalDir(ctx), files, finalSizes(ctx));
     }
 
     /** 两套都在才算完全就位。 */
@@ -197,9 +185,9 @@ public final class LocalModelManager {
 
     public static String tierSummary(Context ctx) {
         if (isHq(ctx)) {
-            return "中英混说都准，内存和速度吃一点。";
+            return "双语预览加 whisper small 终稿，英文最稳。";
         }
-        return "省空间，中文为主，英文会拼错。";
+        return "一个中英双语模型全包，边说边出字，日常够用。";
     }
 
     public static String statusText(Context ctx) {

@@ -14,7 +14,7 @@
         android:paddingStart="16dp"
         android:paddingTop="16dp"
         android:paddingEnd="16dp"
-        android:paddingBottom="16dp">
+        android:paddingBottom="120dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -345,7 +345,7 @@
                                     android:buttonTint="@color/text_primary"
                                     android:paddingStart="0dp"
                                     android:paddingEnd="4dp"
-                                    android:text="轻量 253MB"
+                                    android:text="标准 199MB"
                                     android:textColor="@color/text_primary"
                                     android:textSize="12sp" />
 
@@ -357,7 +357,7 @@
                                     android:buttonTint="@color/text_primary"
                                     android:paddingStart="0dp"
                                     android:paddingEnd="4dp"
-                                    android:text="高精度 547MB"
+                                    android:text="高精度 563MB"
                                     android:textColor="@color/text_primary"
                                     android:textSize="12sp" />
                             </RadioGroup>
