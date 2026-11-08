@@ -325,10 +325,24 @@ public class SettingsActivity extends AppCompatActivity {
         groupLocal.setVisibility(local ? android.view.View.VISIBLE : android.view.View.GONE);
         styleChip(chipCloud, !local);
         styleChip(chipLocal, local);
+        renderTokens();
         tvModeHint.setText(local
                 ? "离线识别，模型要先下好。整理也在本机做，不联网。"
                 : "连云端接口，边说边出字。");
         refreshLocalStatus();
+    }
+
+    /** 云端用量只在用到云端的时候露出来，本地纯离线就不用看了。 */
+    private void renderTokens() {
+        boolean cloudAsr = !com.minivoice.ime.asr.AsrConfig.PROTOCOL_LOCAL.equals(
+                Prefs.getString(this, Prefs.K_PROTOCOL, com.minivoice.ime.asr.AsrConfig.PROTOCOL_BAILIAN));
+        boolean cloudPolish = !"local".equals(Prefs.getString(this, Prefs.K_POLISH_ENGINE, "cloud"));
+        int total = Prefs.getInt(this, Prefs.K_TOKEN_TOTAL, 0);
+        int count = Prefs.getInt(this, Prefs.K_TOKEN_QUESTS, 0);
+        tvTokens.setText(String.format(java.util.Locale.CHINA,
+                "云端用量 %d tokens，共 %d 次", total, count));
+        llTokens.setVisibility(cloudAsr || cloudPolish
+                ? android.view.View.VISIBLE : android.view.View.GONE);
     }
 
     /** 把规格、说明文字、地址框的提示都刷成当前档的样子。 */
@@ -434,7 +448,7 @@ public class SettingsActivity extends AppCompatActivity {
         })).start();
     }
 
-    /** 真加载一次模型，把包内那段语音喂进去，能出字才算通过。 */
+    /** 真加载一次模型，中文和英文各喂一段语音进去，能出字才算通过。 */
     private void testLocalModel() {
         if (!LocalModelManager.isReady(this)) {
             tvLocalStatus.setText("模型还没下完，先点上面的下载");
@@ -443,64 +457,74 @@ public class SettingsActivity extends AppCompatActivity {
         btnLocalTest.setEnabled(false);
         tvLocalStatus.setText("正在加载模型…");
         new Thread(() -> {
-            byte[] pcm = probeWav();
-            if (pcm.length == 0) {
-                runOnUiThread(() -> {
-                    btnLocalTest.setEnabled(true);
-                    tvLocalStatus.setText("测试语音读不出来");
+            final int[] resIds = {R.raw.test_voice, R.raw.test_voice_en};
+            final String[] labels = {"中文", "英文"};
+            StringBuilder sb = new StringBuilder();
+            boolean allOk = true;
+            for (int k = 0; k < resIds.length; k++) {
+                byte[] pcm = probeWav(resIds[k]);
+                if (pcm.length == 0) {
+                    sb.append(labels[k]).append("：测试语音读不出来\n");
+                    allOk = false;
+                    continue;
+                }
+                final String[] out = {""};
+                final boolean[] failed = {false};
+                LocalAsrEngine engine = new LocalAsrEngine(this);
+                engine.start(new AsrEngine.Callback() {
+                    @Override
+                    public void onPartial(String text) {
+                    }
+
+                    @Override
+                    public void onFinal(String text) {
+                        out[0] = text;
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                        failed[0] = true;
+                        out[0] = message;
+                    }
                 });
-                return;
+                long t0 = System.currentTimeMillis();
+                for (int i = 0; i < pcm.length; i += 3200) {
+                    int n = Math.min(3200, pcm.length - i);
+                    byte[] chunk = new byte[n];
+                    System.arraycopy(pcm, i, chunk, 0, n);
+                    engine.feed(chunk, n);
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException ignored) {
+                    }
+                }
+                engine.finish();
+                long waited = 0;
+                while (out[0].isEmpty() && waited < 20000) {
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException ignored) {
+                    }
+                    waited += 100;
+                }
+                final long cost = System.currentTimeMillis() - t0;
+                String text = out[0];
+                if (failed[0] || text == null || text.isEmpty()) {
+                    allOk = false;
+                    sb.append(labels[k]).append("：没出字（")
+                            .append(text == null || text.isEmpty() ? "超时或加载失败" : text)
+                            .append("）\n");
+                } else {
+                    if (k == 0) text = com.minivoice.ime.asr.TextNormalizer.toSimplified(text);
+                    sb.append(labels[k]).append("：").append(text)
+                            .append("（").append(cost / 1000f).append(" 秒）\n");
+                }
             }
-            final String[] out = {""};
-            final boolean[] failed = {false};
-            LocalAsrEngine engine = new LocalAsrEngine(this);
-            engine.start(new AsrEngine.Callback() {
-                @Override
-                public void onPartial(String text) {
-                    runOnUiThread(() -> tvLocalStatus.setText("识别中：" + text));
-                }
-
-                @Override
-                public void onFinal(String text) {
-                    out[0] = text;
-                }
-
-                @Override
-                public void onError(String message) {
-                    failed[0] = true;
-                    out[0] = message;
-                }
-            });
-            long t0 = System.currentTimeMillis();
-            for (int i = 0; i < pcm.length; i += 3200) {
-                int n = Math.min(3200, pcm.length - i);
-                byte[] chunk = new byte[n];
-                System.arraycopy(pcm, i, chunk, 0, n);
-                engine.feed(chunk, n);
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException ignored) {
-                }
-            }
-            engine.finish();
-            long waited = 0;
-            while (out[0].isEmpty() && waited < 15000) {
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException ignored) {
-                }
-                waited += 100;
-            }
-            final String text = out[0];
-            final boolean bad = failed[0];
-            final long cost = System.currentTimeMillis() - t0;
+            final String result = sb.toString().trim();
+            final boolean ok = allOk;
             runOnUiThread(() -> {
                 btnLocalTest.setEnabled(true);
-                if (bad || text.isEmpty()) {
-                    tvLocalStatus.setText("本地模型没通过：" + (text.isEmpty() ? "没出字" : text));
-                } else {
-                    tvLocalStatus.setText("本地模型正常，用时 " + (cost / 1000f) + " 秒：\n" + text);
-                }
+                tvLocalStatus.setText((ok ? "本地模型正常\n" : "本地模型有问题\n") + result);
             });
         }).start();
     }
@@ -533,7 +557,6 @@ public class SettingsActivity extends AppCompatActivity {
             btnLlmDownload.setVisibility(android.view.View.VISIBLE);
             btnLlmDownload.setEnabled(true);
             btnLlmDownload.setText(ready ? R.string.llm_test : R.string.llm_download);
-            llTokens.setVisibility(android.view.View.GONE);
         } else {
             rgLlmTier.setVisibility(android.view.View.GONE);
             tvLlmStatus.setText("");
@@ -542,8 +565,8 @@ public class SettingsActivity extends AppCompatActivity {
             int count = Prefs.getInt(this, Prefs.K_TOKEN_QUESTS, 0);
             tvTokens.setText(String.format(java.util.Locale.CHINA,
                     "云端整理已用 %d tokens，共 %d 次", total, count));
-            llTokens.setVisibility(android.view.View.VISIBLE);
         }
+        renderTokens();
     }
 
     private void startLlmDownload() {
@@ -957,7 +980,11 @@ public class SettingsActivity extends AppCompatActivity {
 
     /** 包内自带的一段中文语音，真发一次识别请求，跑通才算可用。 */
     private byte[] probeWav() {
-        try (java.io.InputStream in = getResources().openRawResource(R.raw.test_voice)) {
+        return probeWav(R.raw.test_voice);
+    }
+
+    private byte[] probeWav(int resId) {
+        try (java.io.InputStream in = getResources().openRawResource(resId)) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             byte[] buf = new byte[4096];
             int n;
