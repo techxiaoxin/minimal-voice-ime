@@ -14,6 +14,8 @@
     <string name="btn_mode_cn">中</string>
     <string name="btn_mode_num">123</string>
     <string name="btn_expand">展开表情区</string>
+    <string name="quick_switch_ime">切换输入法</string>
+    <string name="quick_open_settings">设置</string>
 
     <string name="voice_hint">按住说话</string>
     <string name="voice_swipe_cancel">上滑取消</string>

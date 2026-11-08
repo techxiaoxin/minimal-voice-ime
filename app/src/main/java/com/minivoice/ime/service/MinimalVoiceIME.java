@@ -28,6 +28,7 @@ import com.minivoice.ime.ui.WaveformDrawable;
 import android.view.View;
 import android.view.Window;
 import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.view.inputmethod.InputConnection;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -80,6 +81,10 @@ public class MinimalVoiceIME extends InputMethodService {
     private ImageView ivMic;
     private LinearLayout llNumbers;
     private ProgressBar pbInline;
+    /** 点设置键展开的快捷面板，里面是换输入法和进设置两条。 */
+    private LinearLayout llQuick;
+    private ImageView ivQuickIme;
+    private ImageView ivQuickSettings;
     /** 当前挂上去的整个键盘根布局，只用来调最小高度，绝不碰它的 LayoutParams。 */
     private View inputRoot;
     /** 微博才显示的展开条和右侧小箭头，点一下切换表情区高度。 */
@@ -182,6 +187,9 @@ public class MinimalVoiceIME extends InputMethodService {
         tvModeLabel = root.findViewById(R.id.tv_mode_label);
         ivModeIcon = root.findViewById(R.id.iv_mode_icon);
         llNumbers = root.findViewById(R.id.ll_numbers);
+        llQuick = root.findViewById(R.id.ll_quick);
+        ivQuickIme = root.findViewById(R.id.iv_quick_ime);
+        ivQuickSettings = root.findViewById(R.id.iv_quick_settings);
         flExpand = root.findViewById(R.id.fl_expand);
         ivExpand = root.findViewById(R.id.iv_expand);
         tvStatus = root.findViewById(R.id.tv_status);
@@ -198,6 +206,23 @@ public class MinimalVoiceIME extends InputMethodService {
         ivMic.setColorFilter(iconTint);
         ivModeIcon.setColorFilter(iconTint);
         ivExpand.setColorFilter(iconTint);
+        ivQuickIme.setColorFilter(iconTint);
+        ivQuickSettings.setColorFilter(iconTint);
+        root.findViewById(R.id.row_switch_ime).setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+            switchIme();
+        });
+        root.findViewById(R.id.row_open_settings).setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+            hideQuickPanel();
+            openSettings();
+        });
+        // 点按键区任何地方都把面板收起来，不挡视线
+        View keyArea = root.findViewById(R.id.fl_keys);
+        keyArea.setOnTouchListener((v, e) -> {
+            hideQuickPanel();
+            return false;
+        });
         ivExpand.setOnClickListener(v -> {
             weiboExpanded = !weiboExpanded;
             applyPanelMode();
@@ -263,6 +288,7 @@ public class MinimalVoiceIME extends InputMethodService {
             showBusy(false);
         }
         currentPkg = info != null ? info.packageName : null;
+        hideQuickPanel();
         applyPanelMode();
     }
 
@@ -498,8 +524,50 @@ public class MinimalVoiceIME extends InputMethodService {
     private void bindSettingsButton() {
         btnSettings.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-            openSettings();
+            if (llQuick == null) {
+                openSettings();
+                return;
+            }
+            if (llQuick.getVisibility() == View.VISIBLE) hideQuickPanel();
+            else showQuickPanel();
         });
+    }
+
+    /**
+     * 展开快捷面板。输入法窗口高度跟着视图走，面板一显示窗口自己就长高，
+     * 不用像微博那样手动垫高度，也不用 PopupWindow，那个会被小窗口裁掉。
+     */
+    private void showQuickPanel() {
+        if (llQuick == null) return;
+        numbersOpen = false;
+        applyModeState(false);
+        llQuick.setVisibility(View.VISIBLE);
+    }
+
+    private void hideQuickPanel() {
+        if (llQuick != null && llQuick.getVisibility() != View.GONE) {
+            llQuick.setVisibility(View.GONE);
+        }
+    }
+
+    /** 切到下一个输入法，切不动就弹系统的输入法选择器。 */
+    private void switchIme() {
+        hideQuickPanel();
+        try {
+            InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm == null) return;
+            // 切输入法要用输入法服务自己的这个方法，系统管理器上那个同名方法签名不一样。
+            // 这方法 API 28 才有，低版本直接弹系统选择器。
+            boolean ok = false;
+            if (Build.VERSION.SDK_INT >= 28) ok = switchToNextInputMethod(false);
+            if (!ok) imm.showInputMethodPicker();
+        } catch (Throwable t) {
+            try {
+                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) imm.showInputMethodPicker();
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     /** 文字态显示 123，按下去进数字行；数字态显示麦克风，按下去回语音。 */
