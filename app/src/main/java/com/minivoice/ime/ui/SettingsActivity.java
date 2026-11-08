@@ -296,11 +296,9 @@ public class SettingsActivity extends AppCompatActivity {
         refreshLocalStatus();
     }
 
-    /** 地址框管谁：标准档是唯一的那个模型，高精度档是终稿模型。 */
+    /** 地址框管终稿模型，预览模型固定走预设。 */
     private String targetUrl() {
-        return LocalModelManager.isHq(this)
-                ? LocalModelManager.defaultFinalUrl(this)
-                : LocalModelManager.defaultStreamUrl(this);
+        return LocalModelManager.defaultFinalUrl(this);
     }
 
     private void refreshLocalStatus() {

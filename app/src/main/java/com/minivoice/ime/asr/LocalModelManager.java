@@ -17,8 +17,9 @@ import okhttp3.Response;
 /**
  * 本地模型的存放与下载。分两档规格，用户在设置页自己选，也允许改下载地址：
  *
- * 轻量档：14M 流式小模型出预览，SenseVoice int8 出终稿，一共约 253MB，快、占空间小。
- * 高精度档：中英双语流式模型出预览，whisper small int8 出终稿，一共约 547MB，中英混说准得多。
+ * 两档预览都用 14M 那个极简流式模型，24MB，边说边出字够快。
+ * 标准档终稿 SenseVoice int8，约 228MB，中文带标点。
+ * 高精度档终稿 whisper small int8，约 364MB，英文最稳。
  *
  * 改地址只要文件名跟这一档的约定一致就能下，用户自己找的同款模型也能用。
  */
@@ -26,22 +27,25 @@ public final class LocalModelManager {
 
     public static final String TIER_LIGHT = "light";
     public static final String TIER_HQ = "hq";
-    private static final String[] EMPTY_FILES = new String[0];
-    private static final long[] EMPTY_SIZES = new long[0];
 
-    /** 预览模型两档共用，中英双语，下好一次切档就不用再下。 */
-    public static final String STREAM_DIR = "sherpa-zh-en-stream";
-    /** 终稿模型只有高精度档才有，单独一个目录，和预览模型共存。 */
+    /** 预览模型两档共用，24MB 的极简流式，下好一次切档就不用再下。 */
+    public static final String STREAM_DIR = "sherpa-zh14m";
+    /** 终稿模型两档各一个目录，能共存，切档不用重下。 */
+    public static final String SV_DIR = "sherpa-sensevoice";
     public static final String HQ_FINAL_DIR = "sherpa-whisper-small";
 
-    /** 预览模型：中英双语流式 zipformer，int8，约 199MB。14M 那个纯中文词表同款文件结构。 */
+    /** 预览模型：14M 流式 zipformer，int8，约 24MB，只认中文，英文靠终稿兜。 */
     public static final String[] STREAM_FILES = {
             "encoder-epoch-99-avg-1.int8.onnx",
             "decoder-epoch-99-avg-1.int8.onnx",
             "joiner-epoch-99-avg-1.int8.onnx",
             "tokens.txt",
     };
-    public static final long[] STREAM_SIZES = {181895032L, 13091040L, 3228404L, 56317L};
+    public static final long[] STREAM_SIZES = {21621684L, 1888682L, 1795562L, 48697L};
+
+    /** 标准档终稿：SenseVoice int8，中英日韩粤，自带标点和数字规整，国内阿里开源。 */
+    public static final String[] LIGHT_FINAL_FILES = {"model.int8.onnx", "tokens.txt"};
+    public static final long[] LIGHT_FINAL_SIZES = {239233841L, 315894L};
 
     /** 高精度档才有的终稿模型：whisper small int8，encoder 加 decoder 两个大件。 */
     public static final String[] HQ_FINAL_FILES = {
@@ -52,7 +56,10 @@ public final class LocalModelManager {
     public static final long[] HQ_FINAL_SIZES = {112442483L, 262226114L, 816730L};
 
     public static final String STREAM_BASE_DEFAULT =
-            "https://hf-mirror.com/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/main/";
+            "https://hf-mirror.com/csukuangfj/sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23/resolve/main/";
+    public static final String SV_BASE_DEFAULT =
+            "https://hf-mirror.com/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/";
+
     public static final String HQ_FINAL_BASE_DEFAULT =
             "https://hf-mirror.com/csukuangfj/sherpa-onnx-whisper-small/resolve/main/";
 
@@ -86,13 +93,12 @@ public final class LocalModelManager {
         return STREAM_SIZES;
     }
 
-    /** 标准档没有终稿模型，预览模型就干全部的活。 */
     public static String[] finalFiles(Context ctx) {
-        return isHq(ctx) ? HQ_FINAL_FILES : EMPTY_FILES;
+        return isHq(ctx) ? HQ_FINAL_FILES : LIGHT_FINAL_FILES;
     }
 
     public static long[] finalSizes(Context ctx) {
-        return isHq(ctx) ? HQ_FINAL_SIZES : EMPTY_SIZES;
+        return isHq(ctx) ? HQ_FINAL_SIZES : LIGHT_FINAL_SIZES;
     }
 
     public static String defaultStreamUrl(Context ctx) {
@@ -100,7 +106,7 @@ public final class LocalModelManager {
     }
 
     public static String defaultFinalUrl(Context ctx) {
-        return isHq(ctx) ? HQ_FINAL_BASE_DEFAULT : "";
+        return isHq(ctx) ? HQ_FINAL_BASE_DEFAULT : SV_BASE_DEFAULT;
     }
 
     public static File dir(Context ctx) {
@@ -110,18 +116,15 @@ public final class LocalModelManager {
     }
 
     public static File finalDir(Context ctx) {
-        File f = new File(ctx.getFilesDir(), HQ_FINAL_DIR);
+        String name = isHq(ctx) ? HQ_FINAL_DIR : SV_DIR;
+        File f = new File(ctx.getFilesDir(), name);
         if (!f.exists()) f.mkdirs();
         return f;
     }
 
-    /**
-     * 标准档只有一个模型，用户填的地址就替换这个预览模型。
-     * 高精度档预览模型固定走预设，用户填的地址管终稿模型。
-     */
+    /** 预览模型固定走预设，界面那个地址框专门管终稿模型。 */
     public static String baseUrl(Context ctx) {
-        if (isHq(ctx)) return defaultStreamUrl(ctx);
-        return customOr(ctx, defaultStreamUrl(ctx));
+        return defaultStreamUrl(ctx);
     }
 
     /** 高精度档的终稿模型地址，留空就用预设镜像。 */
@@ -149,9 +152,7 @@ public final class LocalModelManager {
     }
 
     public static boolean finalReady(Context ctx) {
-        String[] files = finalFiles(ctx);
-        if (files.length == 0) return true;
-        return check(finalDir(ctx), files, finalSizes(ctx));
+        return check(finalDir(ctx), finalFiles(ctx), finalSizes(ctx));
     }
 
     /** 两套都在才算完全就位。 */
@@ -185,9 +186,9 @@ public final class LocalModelManager {
 
     public static String tierSummary(Context ctx) {
         if (isHq(ctx)) {
-            return "双语预览加 whisper small 终稿，英文最稳。";
+            return "极简预览加 whisper small 终稿，英文最稳。";
         }
-        return "一个中英双语模型全包，边说边出字，日常够用。";
+        return "极简预览加 SenseVoice 终稿，中文带标点，日常够用。";
     }
 
     public static String statusText(Context ctx) {

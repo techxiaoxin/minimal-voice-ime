@@ -345,7 +345,7 @@
                                     android:buttonTint="@color/text_primary"
                                     android:paddingStart="0dp"
                                     android:paddingEnd="4dp"
-                                    android:text="标准 199MB"
+                                    android:text="标准 252MB"
                                     android:textColor="@color/text_primary"
                                     android:textSize="12sp" />
 
@@ -357,7 +357,7 @@
                                     android:buttonTint="@color/text_primary"
                                     android:paddingStart="0dp"
                                     android:paddingEnd="4dp"
-                                    android:text="高精度 563MB"
+                                    android:text="高精度 388MB"
                                     android:textColor="@color/text_primary"
                                     android:textSize="12sp" />
                             </RadioGroup>
