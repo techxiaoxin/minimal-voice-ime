@@ -332,6 +332,17 @@ public class SettingsActivity extends AppCompatActivity {
         refreshLocalStatus();
     }
 
+    /** 数量上万就换成「万」为单位，小数目照样显示完整数字。 */
+    private String formatCount(int n) {
+        if (n < 10000) return String.valueOf(n);
+        double w = n / 10000.0;
+        String text = w >= 10
+                ? String.format(java.util.Locale.CHINA, "%.0f万", w)
+                : String.format(java.util.Locale.CHINA, "%.1f万", w);
+        if (text.contains(".0万")) text = text.replace(".0万", "万");
+        return text;
+    }
+
     /** 云端用量只在用到云端的时候露出来，本地纯离线就不用看了。 */
     private void renderTokens() {
         boolean cloudAsr = !com.minivoice.ime.asr.AsrConfig.PROTOCOL_LOCAL.equals(
@@ -340,7 +351,7 @@ public class SettingsActivity extends AppCompatActivity {
         int total = Prefs.getInt(this, Prefs.K_TOKEN_TOTAL, 0);
         int count = Prefs.getInt(this, Prefs.K_TOKEN_QUESTS, 0);
         tvTokens.setText(String.format(java.util.Locale.CHINA,
-                "云端用量 %d tokens，共 %d 次", total, count));
+                "云端用量 %s tokens，共 %d 次", formatCount(total), count));
         llTokens.setVisibility(cloudAsr || cloudPolish
                 ? android.view.View.VISIBLE : android.view.View.GONE);
     }
@@ -561,10 +572,6 @@ public class SettingsActivity extends AppCompatActivity {
             rgLlmTier.setVisibility(android.view.View.GONE);
             tvLlmStatus.setText("");
             btnLlmDownload.setVisibility(android.view.View.GONE);
-            int total = Prefs.getInt(this, Prefs.K_TOKEN_TOTAL, 0);
-            int count = Prefs.getInt(this, Prefs.K_TOKEN_QUESTS, 0);
-            tvTokens.setText(String.format(java.util.Locale.CHINA,
-                    "云端整理已用 %d tokens，共 %d 次", total, count));
         }
         renderTokens();
     }
