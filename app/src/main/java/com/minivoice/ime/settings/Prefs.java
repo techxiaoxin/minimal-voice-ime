@@ -93,25 +93,79 @@ public final class Prefs {
     public static final String K_TOKEN_LOG = "token_log";
 
     public static void addTokens(Context ctx, int tokens) {
-        addTokens(ctx, tokens, "其他");
+        addTokens(ctx, tokens, "识别");
     }
 
-    /** 记一笔用量，顺手把明细也留下，设置页点「明细」能看最近几十条。 */
+    /** 一次说话算一组：识别先落一行，紧接着的整理并到同一行里。格式 ts|识别|整理。 */
     public static void addTokens(Context ctx, int tokens, String kind) {
         int n = Math.max(0, tokens);
         putInt(ctx, K_TOKEN_TOTAL, getInt(ctx, K_TOKEN_TOTAL, 0) + n);
         putInt(ctx, K_TOKEN_QUESTS, getInt(ctx, K_TOKEN_QUESTS, 0) + 1);
-        String line = System.currentTimeMillis() + "|" + kind + "|" + n;
-        String old = getString(ctx, K_TOKEN_LOG, "");
-        String all = old.isEmpty() ? line : line + "\n" + old;
-        String[] parts = all.split("\n");
+
+        long now = System.currentTimeMillis();
+        String[] lines = getString(ctx, K_TOKEN_LOG, "").split("\n");
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < parts.length && i < 60; i++) {
-            if (parts[i].trim().isEmpty()) continue;
+        boolean merged = false;
+        int kept = 0;
+        if ("整理".equals(kind) && lines.length > 0) {
+            String first = lines[0].trim();
+            String[] p = first.split("\\|");
+            if (p.length >= 3) {
+                try {
+                    long ts = Long.parseLong(p[0]);
+                    int asr = parseNum(p[1]);
+                    int pol = parseNum(p[2]);
+                    if (pol == 0 && now - ts < 5 * 60 * 1000L) {
+                        lines[0] = ts + "|" + asr + "|" + (pol + n);
+                        merged = true;
+                    }
+                } catch (Exception ignored) {
+                    // 老格式，下面按普通行处理
+                }
+            }
+        }
+        for (String line : lines) {
+            line = line.trim();
+            if (line.isEmpty()) continue;
+            String[] p = line.split("\\|");
+            if (p.length < 3) continue;
+            long ts;
+            int a = 0;
+            int b = 0;
+            try {
+                ts = Long.parseLong(p[0]);
+                if ("识别".equals(p[1]) || "整理".equals(p[1]) || "其他".equals(p[1])) {
+                    // 旧格式：ts|类型|tokens
+                    int v = Integer.parseInt(p[2]);
+                    if ("整理".equals(p[1])) b = v; else a = v;
+                } else {
+                    a = parseNum(p[1]);
+                    b = parseNum(p[2]);
+                }
+            } catch (Exception e) {
+                continue;
+            }
+            if (kept >= 60) break;
             if (sb.length() > 0) sb.append("\n");
-            sb.append(parts[i].trim());
+            sb.append(ts).append("|").append(a).append("|").append(b);
+            kept++;
+        }
+        if (!merged) {
+            String head = now + "|" + ("整理".equals(kind) ? 0 : n) + "|" + ("整理".equals(kind) ? n : 0);
+            String old = sb.toString();
+            sb.setLength(0);
+            sb.append(head);
+            if (!old.isEmpty()) sb.append("\n").append(old);
         }
         putString(ctx, K_TOKEN_LOG, sb.toString());
+    }
+
+    private static int parseNum(String v) {
+        try {
+            return Integer.parseInt(v.trim());
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     public static void resetLog(Context ctx) {
