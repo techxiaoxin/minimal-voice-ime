@@ -83,8 +83,8 @@ public class MinimalVoiceIME extends InputMethodService {
     private ProgressBar pbInline;
     /** 点设置键展开的快捷面板，里面是换输入法和进设置两条。 */
     private LinearLayout llQuick;
-    private ImageView ivQuickIme;
-    private ImageView ivQuickSettings;
+    private ImageButton btnQuickIme;
+    private ImageButton btnQuickSettings;
     /** 当前挂上去的整个键盘根布局，只用来调最小高度，绝不碰它的 LayoutParams。 */
     private View inputRoot;
     /** 微博才显示的展开条和右侧小箭头，点一下切换表情区高度。 */
@@ -188,8 +188,8 @@ public class MinimalVoiceIME extends InputMethodService {
         ivModeIcon = root.findViewById(R.id.iv_mode_icon);
         llNumbers = root.findViewById(R.id.ll_numbers);
         llQuick = root.findViewById(R.id.ll_quick);
-        ivQuickIme = root.findViewById(R.id.iv_quick_ime);
-        ivQuickSettings = root.findViewById(R.id.iv_quick_settings);
+        btnQuickIme = root.findViewById(R.id.btn_quick_ime);
+        btnQuickSettings = root.findViewById(R.id.btn_quick_settings);
         flExpand = root.findViewById(R.id.fl_expand);
         ivExpand = root.findViewById(R.id.iv_expand);
         tvStatus = root.findViewById(R.id.tv_status);
@@ -206,22 +206,16 @@ public class MinimalVoiceIME extends InputMethodService {
         ivMic.setColorFilter(iconTint);
         ivModeIcon.setColorFilter(iconTint);
         ivExpand.setColorFilter(iconTint);
-        ivQuickIme.setColorFilter(iconTint);
-        ivQuickSettings.setColorFilter(iconTint);
-        root.findViewById(R.id.row_switch_ime).setOnClickListener(v -> {
+        btnQuickIme.setColorFilter(iconTint);
+        btnQuickSettings.setColorFilter(iconTint);
+        btnQuickIme.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
             switchIme();
         });
-        root.findViewById(R.id.row_open_settings).setOnClickListener(v -> {
+        btnQuickSettings.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
             hideQuickPanel();
             openSettings();
-        });
-        // 点按键区任何地方都把面板收起来，不挡视线
-        View keyArea = root.findViewById(R.id.fl_keys);
-        keyArea.setOnTouchListener((v, e) -> {
-            hideQuickPanel();
-            return false;
         });
         ivExpand.setOnClickListener(v -> {
             weiboExpanded = !weiboExpanded;
@@ -542,6 +536,7 @@ public class MinimalVoiceIME extends InputMethodService {
         numbersOpen = false;
         applyModeState(false);
         llQuick.setVisibility(View.VISIBLE);
+        llQuick.bringToFront();
     }
 
     private void hideQuickPanel() {
@@ -777,7 +772,7 @@ public class MinimalVoiceIME extends InputMethodService {
                 // 本地识别也能过一遍 AI 整理，思路是把识别好的文字交给云端模型规整，
                 // 联网失败就退回本地清理，不至于卡住不出字
                 if (AsrConfig.PROTOCOL_LOCAL.equals(config.protocol)) {
-                    if (config.polish && raw.length() > 20) {
+                    if (config.polish) {
                         refreshStatus("整理中…");
                         startPolishProgress();
                         TextPolisher.polish(MinimalVoiceIME.this, raw, result -> {
@@ -814,7 +809,7 @@ public class MinimalVoiceIME extends InputMethodService {
                     return;
                 }
 
-                if (config.polish && raw.length() > 20) {
+                if (config.polish) {
                     // 整理期间保持 waiting，防止用户又按一次录进来
                     refreshStatus("整理中…");
                     startPolishProgress();
