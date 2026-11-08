@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">极简语音</string>
-    <string name="settings_title">设置</string>
+    <string name="settings_title">极简语音输入法</string>
     <string name="subtype_label">语音输入</string>
     <string name="accessibility_label">极简语音按键拦截</string>
     <string name="accessibility_desc">用于拦截蓝牙耳机按键、把按键映射为开始或结束语音输入。只在系统输入法为极简语音时生效。</string>

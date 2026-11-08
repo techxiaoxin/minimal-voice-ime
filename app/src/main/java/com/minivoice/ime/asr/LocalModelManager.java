@@ -19,7 +19,7 @@ import okhttp3.Response;
  *
  * 两档预览都用 14M 那个极简流式模型，24MB，边说边出字够快。
  * 标准档终稿 SenseVoice int8，约 228MB，中文带标点。
- * 高精度档终稿 whisper small int8，约 364MB，英文最稳。
+ * 高精度档终稿 whisper medium int8，约 903MB，中英都稳。
  *
  * 改地址只要文件名跟这一档的约定一致就能下，用户自己找的同款模型也能用。
  */
@@ -47,7 +47,7 @@ public final class LocalModelManager {
     public static final String[] LIGHT_FINAL_FILES = {"model.int8.onnx", "tokens.txt"};
     public static final long[] LIGHT_FINAL_SIZES = {239233841L, 315894L};
 
-    /** 高精度档才有的终稿模型：whisper small int8，encoder 加 decoder 两个大件。 */
+    /** 高精度档才有的终稿模型：whisper medium int8，encoder 加 decoder 两个大件。 */
     public static final String[] HQ_FINAL_FILES = {
             "medium-encoder.int8.onnx", "medium-decoder.int8.onnx", "medium-tokens.txt"};
     public static final long[] HQ_FINAL_SIZES = {374196283L, 571059257L, 816730L};
@@ -183,7 +183,7 @@ public final class LocalModelManager {
 
     public static String tierSummary(Context ctx) {
         if (isHq(ctx)) {
-            return "极简预览加 whisper small 终稿，英文最稳。";
+            return "极简预览加 whisper medium 终稿，中英都稳。";
         }
         return "极简预览加 SenseVoice 终稿，中文带标点，日常够用。";
     }

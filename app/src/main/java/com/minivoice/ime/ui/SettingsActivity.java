@@ -418,16 +418,30 @@ public class SettingsActivity extends AppCompatActivity {
                     formatCount(tokens) + " tokens"});
         }
 
+        android.app.Dialog d = new android.app.Dialog(this);
+
         android.widget.LinearLayout box = new android.widget.LinearLayout(this);
         box.setOrientation(android.widget.LinearLayout.VERTICAL);
         int pad = (int) (getResources().getDisplayMetrics().density * 18);
         box.setPadding(pad, pad, pad, pad);
 
+        android.widget.LinearLayout headRow = new android.widget.LinearLayout(this);
+        headRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        headRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
         android.widget.TextView head = new android.widget.TextView(this);
         head.setText("最近消耗明细");
         head.setTextSize(16);
         head.setTextColor(getResources().getColor(R.color.text_primary, getTheme()));
-        box.addView(head);
+        head.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        headRow.addView(head);
+        android.widget.TextView close = new android.widget.TextView(this);
+        close.setText("关闭");
+        close.setTextSize(12);
+        close.setTextColor(getResources().getColor(R.color.text_secondary, getTheme()));
+        close.setOnClickListener(v -> d.dismiss());
+        headRow.addView(close);
+        box.addView(headRow);
 
         android.widget.TextView sum = new android.widget.TextView(this);
         sum.setText("识别 " + formatCount(asrSum) + "，整理 " + formatCount(polishSum)
@@ -478,15 +492,21 @@ public class SettingsActivity extends AppCompatActivity {
                 row.addView(t2);
                 row.addView(t3);
                 list.addView(row);
+                if (i < show - 1) {
+                    android.view.View line = new android.view.View(this);
+                    line.setBackgroundColor(getResources().getColor(R.color.divider, getTheme()));
+                    list.addView(line, new android.widget.LinearLayout.LayoutParams(
+                            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                            (int) Math.max(1, getResources().getDisplayMetrics().density * 0.6f)));
+                }
             }
         }
         box.addView(sv, new android.widget.LinearLayout.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        android.app.Dialog d = new android.app.Dialog(this);
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
         bg.setColor(getResources().getColor(R.color.card_bg, getTheme()));
-        bg.setCornerRadius(getResources().getDisplayMetrics().density * 16);
+        bg.setCornerRadius(getResources().getDisplayMetrics().density * 18);
         d.getWindow().setBackgroundDrawable(bg);
         d.setContentView(box);
         d.setCanceledOnTouchOutside(true);
@@ -781,8 +801,8 @@ public class SettingsActivity extends AppCompatActivity {
         if (llModels == null) return;
         llModels.removeAllViews();
         boolean hq = LocalModelManager.isHq(this);
-        addModelRow("语音预览模型", "zh14m 中英双语", LocalModelManager.dir(this), false);
-        addModelRow("语音终稿模型", hq ? "whisper small" : "SenseVoice", LocalModelManager.finalDir(this), false);
+        addModelRow("语音预览模型", "zh14m 中英双语 24MB", LocalModelManager.dir(this), false);
+        addModelRow("语音终稿模型", hq ? "whisper medium 903MB" : "SenseVoice 228MB", LocalModelManager.finalDir(this), false);
         addModelRow("整理小模型", "Qwen2.5-0.5B 409MB",
                 new java.io.File(getFilesDir(), com.minivoice.ime.asr.LocalLlmModel.SMALL_DIR), true);
         addModelRow("整理大模型", "Qwen2.5-1.5B 718MB",
@@ -822,6 +842,8 @@ public class SettingsActivity extends AppCompatActivity {
             del.setAllCaps(false);
             del.setMinWidth(dp(64));
             del.setBackgroundResource(com.minivoice.ime.R.drawable.bg_btn_secondary);
+            del.setElevation(0f);
+            del.setStateListAnimator(null);
             del.setTextColor(getColor(com.minivoice.ime.R.color.text_primary));
             del.setOnClickListener(v -> confirmDelete(title, dir, isLlm));
             row.addView(del);
