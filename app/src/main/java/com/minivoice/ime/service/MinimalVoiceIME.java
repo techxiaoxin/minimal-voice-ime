@@ -392,8 +392,8 @@ public class MinimalVoiceIME extends InputMethodService {
                     if (holdStarted) {
                         holdStarted = false;
                         stopVoice();
-                    } else if (composing.length() > 0) {
-                        // 正在拼拼音：点一下就是把第一个候选上屏，没候选就当空格
+                    } else if (fullMode) {
+                        // 全键盘打字时它就是个空格键，上屏候选或补空格；发送走右下角那颗
                         v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                         fullSpace();
                     } else if (editorHasText()) {
@@ -431,7 +431,7 @@ public class MinimalVoiceIME extends InputMethodService {
         if (tvStatus == null || btnVoice == null) return;
         if (recording) return;
         String label;
-        if (fullMode && composing.length() > 0) {
+        if (fullMode) {
             label = "空格";
         } else if (editorHasText()) {
             label = "发送";
@@ -485,13 +485,16 @@ public class MinimalVoiceIME extends InputMethodService {
         if (deleteHandler == null) deleteHandler = new Handler(Looper.getMainLooper());
         stopRepeatDelete();
         deleteRunnable = new Runnable() {
+            private int times = 0;
+
             @Override
             public void run() {
                 deleteOneStep();
-                deleteHandler.postDelayed(this, 60);
+                times++;
+                deleteHandler.postDelayed(this, times < 10 ? 60 : 35);
             }
         };
-        deleteHandler.postDelayed(deleteRunnable, 400);
+        deleteHandler.postDelayed(deleteRunnable, 320);
     }
 
     private void stopRepeatDelete() {
@@ -520,6 +523,7 @@ public class MinimalVoiceIME extends InputMethodService {
 
     /** 中间条不按住的时候就当空格键用。 */
     private void insertSpace() {
+        enBuf = "";
         InputConnection ic = getCurrentInputConnection();
         if (ic == null) return;
         ic.commitText(" ", 1);
@@ -774,6 +778,7 @@ public class MinimalVoiceIME extends InputMethodService {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         rebuildFullRows();
+        installFullKeyTouch();
         refreshCand();
 
         new Thread(() -> com.minivoice.ime.input.PinyinDict.get(getApplicationContext())).start();
@@ -795,7 +800,7 @@ public class MinimalVoiceIME extends InputMethodService {
     }
 
     private void addDigitRow() {
-        LinearLayout row = newRow(36);
+        LinearLayout row = newRow(40);
         for (int i = 1; i <= 9; i++) {
             row.addView(mkKey(String.valueOf(i), 1f, 14, false, null,
                     onLetterRunnable(String.valueOf(i)), null));
@@ -805,18 +810,19 @@ public class MinimalVoiceIME extends InputMethodService {
     }
 
     private void addLetterRow(String[] letters, String[] puncts) {
-        LinearLayout row = newRow(44);
+        LinearLayout row = newRow(50);
         for (int i = 0; i < letters.length; i++) {
             final String letter = letters[i];
-            row.addView(mkKey(letter, 1f, 16, true,
-                    () -> onFullLetter(letter.toUpperCase()), onLetterRunnable(letter), puncts[i]));
+            boolean upper = shiftOn && !pinyinMode;
+            row.addView(mkKey(upper ? letter.toUpperCase() : letter, 1f, 17, true,
+                    () -> onShiftLetter(letter), () -> onShiftLetter(letter), puncts[i]));
         }
         llFullRows.addView(row);
     }
 
     /** 最后一排：左边大小写切换，中间 z 到 m，右边中英切换。退格和下面那条重复，不再放。 */
     private void addLastRow() {
-        LinearLayout row = newRow(44);
+        LinearLayout row = newRow(50);
         row.addView(mkKey(shiftOn ? "⇧" : "⇧", 1.1f, 15, false, null, () -> {
             shiftOn = !shiftOn;
             rebuildFullRows();
@@ -824,9 +830,9 @@ public class MinimalVoiceIME extends InputMethodService {
         String[] mid = {"z", "x", "c", "v", "b", "n", "m"};
         for (String k : mid) {
             final String letter = k;
-            String label = shiftOn && !pinyinMode ? letter.toUpperCase() : letter;
-            row.addView(mkKey(label, 1f, 16, true,
-                    () -> onFullLetter(letter.toUpperCase()), onLetterRunnable(letter), null));
+            boolean upper = shiftOn && !pinyinMode;
+            row.addView(mkKey(upper ? letter.toUpperCase() : letter, 1f, 17, true,
+                    () -> onShiftLetter(letter), () -> onShiftLetter(letter), null));
         }
         row.addView(mkKey(pinyinMode ? "中" : "英", 1.1f, 14, false, null, () -> {
             pinyinMode = !pinyinMode;
@@ -874,55 +880,129 @@ public class MinimalVoiceIME extends InputMethodService {
             hint.setText(punct);
         }
 
-        final boolean[] handled = {false};
-        final Runnable[] longRunner = {null};
-        box.setOnTouchListener((v, e) -> {
+        KeySpec spec = new KeySpec();
+        spec.action = action;
+        // 中文模式长按不出大写：拼音串里突然落一个大写字母，后面全乱
+        spec.longAction = (longPressUppercase && longAction != null && !pinyinMode)
+                ? longAction : null;
+        spec.punct = punct;
+        box.setTag(spec);
+        return box;
+    }
+
+    /** 每个键上挂的东西：短按做什么、长按做什么、上滑打什么标点。 */
+    private static class KeySpec {
+        Runnable action;
+        Runnable longAction;
+        String punct;
+    }
+
+    /** 一整块键盘收触摸：按歪了吸到最近的键，手指滑过去能换键，抬起才上屏。 */
+    private void installFullKeyTouch() {
+        if (llFullRows == null) return;
+        final View[] pressed = {null};
+        final Runnable[] longTask = {null};
+        final boolean[] longFired = {false};
+        final float[] downRawY = {0f};
+
+        llFullRows.setOnTouchListener((v, e) -> {
             switch (e.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    handled[0] = false;
-                    v.setPressed(true);
-                    v.animate().scaleX(1.14f).scaleY(1.14f).alpha(0.78f)
-                            .setDuration(70).start();
-                    if (longPressUppercase && longAction != null) {
-                        longRunner[0] = () -> {
-                            handled[0] = true;
-                            v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-                            longAction.run();
-                        };
-                        main.postDelayed(longRunner[0], 380);
+                case MotionEvent.ACTION_DOWN: {
+                    View k = keyAt(e.getX(), e.getY());
+                    pressed[0] = k;
+                    longFired[0] = false;
+                    longTask[0] = null;
+                    downRawY[0] = e.getRawY();
+                    if (k != null) {
+                        pressKey(k);
+                        scheduleLong(k, longTask, longFired);
                     }
                     return true;
-                case MotionEvent.ACTION_UP:
-                    v.setPressed(false);
-                    v.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(90).start();
-                    if (longRunner[0] != null) main.removeCallbacks(longRunner[0]);
-                    if (!handled[0]) {
-                        v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-                        if (punct != null && !punct.isEmpty()
-                                && e.getY() < 0) {
-                            commitPunct(punct);
-                        } else {
-                            action.run();
+                }
+                case MotionEvent.ACTION_MOVE: {
+                    View k = keyAt(e.getX(), e.getY());
+                    if (k != pressed[0]) {
+                        if (longTask[0] != null) main.removeCallbacks(longTask[0]);
+                        longTask[0] = null;
+                        longFired[0] = false;
+                        if (pressed[0] != null) releaseKey(pressed[0]);
+                        pressed[0] = k;
+                        if (k != null) {
+                            pressKey(k);
+                            k.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                            scheduleLong(k, longTask, longFired);
                         }
-                        vibrate(6);
                     }
                     return true;
-                case MotionEvent.ACTION_MOVE:
-                    // 字母键往上滑出键面就打标点，键面上方的小字就是提示
-                    if (punct != null && !punct.isEmpty()) {
-                        v.setPressed(e.getY() < 0);
+                }
+                case MotionEvent.ACTION_UP: {
+                    if (longTask[0] != null) main.removeCallbacks(longTask[0]);
+                    View k = pressed[0];
+                    pressed[0] = null;
+                    if (k != null) releaseKey(k);
+                    if (k == null || longFired[0]) return true;
+                    KeySpec spec = (KeySpec) k.getTag();
+                    if (spec == null || spec.action == null) return true;
+                    k.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                    // 手指从键面往上滑出一小段，就打右上角那个标点
+                    if (spec.punct != null && !spec.punct.isEmpty()
+                            && downRawY[0] - e.getRawY() > dp(10)) {
+                        commitPunct(spec.punct);
+                        return true;
                     }
+                    spec.action.run();
                     return true;
-                case MotionEvent.ACTION_CANCEL:
-                    v.setPressed(false);
-                    v.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(90).start();
-                    if (longRunner[0] != null) main.removeCallbacks(longRunner[0]);
+                }
+                case MotionEvent.ACTION_CANCEL: {
+                    if (longTask[0] != null) main.removeCallbacks(longTask[0]);
+                    if (pressed[0] != null) releaseKey(pressed[0]);
+                    pressed[0] = null;
                     return true;
+                }
                 default:
                     return false;
             }
         });
-        return box;
+    }
+
+    /** 触摸点落在哪个键上，行与键都是按坐标自己算，不依赖子控件的监听。 */
+    private View keyAt(float x, float y) {
+        if (llFullRows == null) return null;
+        for (int i = 0; i < llFullRows.getChildCount(); i++) {
+            View row = llFullRows.getChildAt(i);
+            if (y < row.getTop() || y >= row.getBottom()) continue;
+            if (!(row instanceof ViewGroup)) continue;
+            ViewGroup g = (ViewGroup) row;
+            float rx = x - row.getLeft();
+            float ry = y - row.getTop();
+            for (int j = 0; j < g.getChildCount(); j++) {
+                View key = g.getChildAt(j);
+                if (rx >= key.getLeft() && rx < key.getRight()
+                        && ry >= key.getTop() && ry < key.getBottom()) return key;
+            }
+        }
+        return null;
+    }
+
+    private void pressKey(View k) {
+        k.animate().cancel();
+        k.animate().scaleX(1.06f).scaleY(1.06f).alpha(0.86f).setDuration(45).start();
+    }
+
+    private void releaseKey(View k) {
+        k.animate().cancel();
+        k.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(70).start();
+    }
+
+    private void scheduleLong(final View k, Runnable[] holder, boolean[] fired) {
+        KeySpec spec = (KeySpec) k.getTag();
+        if (spec == null || spec.longAction == null) return;
+        holder[0] = () -> {
+            fired[0] = true;
+            k.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+            spec.longAction.run();
+        };
+        main.postDelayed(holder[0], 360);
     }
 
     /** 空格键：轻点有候选就选第一个，没有就打空格；按住 300 毫秒开始说话，上滑取消。 */
@@ -930,9 +1010,10 @@ public class MinimalVoiceIME extends InputMethodService {
         InputConnection ic = getCurrentInputConnection();
         if (ic == null) return;
         char c0 = key.charAt(0);
-        if (!pinyinMode || c0 < 'a' || c0 > 'z') {
+        boolean isLetter = (c0 >= 'a' && c0 <= 'z') || (c0 >= 'A' && c0 <= 'Z');
+        if (!pinyinMode || !isLetter) {
             ic.commitText(key, 1);
-            if (c0 >= 'a' && c0 <= 'z') {
+            if (isLetter) {
                 enBuf = enBuf + key.toLowerCase();
                 if (enBuf.length() > 12) enBuf = enBuf.substring(enBuf.length() - 12);
             } else {
@@ -942,9 +1023,28 @@ public class MinimalVoiceIME extends InputMethodService {
             return;
         }
         enBuf = "";
+        // 拼音串太长先落第一个候选，免得后面越打越乱
+        if (composing.length() >= 24) {
+            if (!candList.isEmpty()) {
+                commitCandidate(candList.get(0));
+            } else if (composing.length() > 0) {
+                ic.commitText(composing.toString(), 1);
+                composing.setLength(0);
+            }
+        }
         composing.append(key.toLowerCase());
         ic.setComposingText(composing.toString(), 1);
         refreshCand();
+    }
+
+    /** 字母键统一入口：英文打开了大写状态就先落一个大写字母，然后自动收回。 */
+    private void onShiftLetter(String letter) {
+        boolean upper = shiftOn && !pinyinMode;
+        if (upper) {
+            shiftOn = false;
+            rebuildFullRows();
+        }
+        onFullLetter(upper ? letter.toUpperCase() : letter);
     }
 
     /** 词库候选要两行才铺得开，其他时候保持一条细条。 */
@@ -974,11 +1074,12 @@ public class MinimalVoiceIME extends InputMethodService {
         InputConnection ic = getCurrentInputConnection();
         if (ic == null) return;
         if (composing.length() > 0) {
-            ic.commitText(candList.isEmpty() ? composing.toString() : candList.get(0), 1);
+            ic.commitText(composing.toString(), 1);
             composing.setLength(0);
         }
-        ic.commitText(p, 1);
         candList.clear();
+        enBuf = "";
+        ic.commitText(p, 1);
         refreshCand();
     }
 
@@ -998,9 +1099,17 @@ public class MinimalVoiceIME extends InputMethodService {
     }
 
     private void fullSpace() {
-        enBuf = "";
-        if (composing.length() > 0 && !candList.isEmpty()) {
-            commitCandidate(candList.get(0));
+        InputConnection ic = getCurrentInputConnection();
+        if (ic == null) return;
+        if (composing.length() > 0) {
+            if (!candList.isEmpty()) {
+                commitCandidate(candList.get(0));
+            } else {
+                ic.commitText(composing.toString(), 1);
+                composing.setLength(0);
+                candList.clear();
+                refreshCand();
+            }
             return;
         }
         insertSpace();
@@ -1014,6 +1123,7 @@ public class MinimalVoiceIME extends InputMethodService {
     private void clearComposing() {
         composing.setLength(0);
         candList.clear();
+        enBuf = "";
         refreshCand();
     }
 
@@ -1022,7 +1132,7 @@ public class MinimalVoiceIME extends InputMethodService {
         llCandBar.removeAllViews();
         candList.clear();
         updateVoiceBar();
-        if (composing.length() == 0) {
+        if (composing.length() == 0 && (pinyinMode || enBuf.isEmpty())) {
             setCandBarHeight(36);
             TextView hint = new TextView(uiCtx);
             hint.setText(pinyinMode ? "拼音输入，点候选上屏" : "英文输入");
@@ -1138,6 +1248,7 @@ public class MinimalVoiceIME extends InputMethodService {
         ic.commitText(body, 1);
         composing.setLength(0);
         candList.clear();
+        enBuf = "";
         refreshCand();
         updateVoiceBar();
     }

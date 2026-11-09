@@ -20,6 +20,20 @@ public class PinyinDict {
     private static PinyinDict inst;
 
     private final Map<String, String[]> words = new LinkedHashMap<>();
+    /** 按前三个字母分桶，桶内保持词表原来的高频顺序，前缀查询只看自己那一小撮。 */
+    private static final class W {
+        final String py;
+        final String[] words;
+
+        W(String py, String[] words) {
+            this.py = py;
+            this.words = words;
+        }
+    }
+
+    private final Map<String, List<W>> buckets = new HashMap<>();
+    private String cacheKey = "";
+    private List<String> cacheVal = null;
     private final Map<String, String> chars = new HashMap<>();
     private final Set<String> syllables = new HashSet<>();
 
@@ -47,7 +61,15 @@ public class PinyinDict {
                 String rest = line.substring(tab + 1).trim();
                 if (py.isEmpty() || rest.isEmpty()) continue;
                 if (isWord) {
-                    words.put(py, rest.split(" "));
+                    String[] ws = rest.split(" ");
+                    words.put(py, ws);
+                    String bk = py.length() > 3 ? py.substring(0, 3) : py;
+                    List<W> b = buckets.get(bk);
+                    if (b == null) {
+                        b = new ArrayList<>();
+                        buckets.put(bk, b);
+                    }
+                    b.add(new W(py, ws));
                 } else {
                     chars.put(py, rest);
                     syllables.add(py);
@@ -70,6 +92,17 @@ public class PinyinDict {
     public List<String> candidates(String letters, int max) {
         List<String> out = new ArrayList<>();
         if (letters == null || letters.isEmpty()) return out;
+        if (letters.equals(cacheKey) && cacheVal != null) {
+            return new ArrayList<>(cacheVal);
+        }
+        List<String> res = build(letters, max);
+        cacheKey = letters;
+        cacheVal = res;
+        return new ArrayList<>(res);
+    }
+
+    private List<String> build(String letters, int max) {
+        List<String> out = new ArrayList<>();
 
         String[] exact = words.get(letters);
         if (exact != null) {
@@ -79,14 +112,17 @@ public class PinyinDict {
             }
         }
         if (out.size() < max) {
-            for (Map.Entry<String, String[]> e : words.entrySet()) {
-                String key = e.getKey();
-                if (key.length() <= letters.length() || !key.startsWith(letters)) continue;
-                for (String w : e.getValue()) {
+            String bk = letters.length() > 3 ? letters.substring(0, 3) : letters;
+            List<W> b = buckets.get(bk);
+            if (b != null) {
+                for (W e : b) {
+                    if (e.py.length() == letters.length() || !e.py.startsWith(letters)) continue;
+                    for (String w : e.words) {
+                        if (out.size() >= max) break;
+                        out.add(w);
+                    }
                     if (out.size() >= max) break;
-                    out.add(w);
                 }
-                if (out.size() >= max) break;
             }
         }
         if (out.size() < max) {
