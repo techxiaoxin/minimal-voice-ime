@@ -118,6 +118,8 @@ public class MinimalVoiceIME extends InputMethodService {
     // 全键盘打字：默认中文拼音，点中英键切成英文直出
     private LinearLayout llFull;
     private LinearLayout llCandBar;
+    private android.widget.HorizontalScrollView hsCand;
+    private int candBarH = 36;
     private LinearLayout llFullRows;
     private View flKeysRow;
     private boolean fullMode = false;
@@ -755,6 +757,7 @@ public class MinimalVoiceIME extends InputMethodService {
 
         android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(uiCtx);
         hs.setHorizontalScrollBarEnabled(false);
+        hsCand = hs;
         hs.setBackgroundColor(uiCtx.getColor(R.color.panel_bg));
         llCandBar = new LinearLayout(uiCtx);
         llCandBar.setOrientation(LinearLayout.HORIZONTAL);
@@ -1002,6 +1005,15 @@ public class MinimalVoiceIME extends InputMethodService {
         refreshCand();
     }
 
+    /** 词库候选要两行才铺得开，其他时候保持一条细条。 */
+    private void setCandBarHeight(int hDp) {
+        if (hsCand == null || candBarH == hDp) return;
+        candBarH = hDp;
+        android.view.ViewGroup.LayoutParams lp = hsCand.getLayoutParams();
+        lp.height = dp(hDp);
+        hsCand.setLayoutParams(lp);
+    }
+
     private void commitEnPhrase(String cand) {
         InputConnection ic = getCurrentInputConnection();
         if (ic == null) return;
@@ -1069,6 +1081,7 @@ public class MinimalVoiceIME extends InputMethodService {
         candList.clear();
         updateVoiceBar();
         if (composing.length() == 0) {
+            setCandBarHeight(36);
             TextView hint = new TextView(uiCtx);
             hint.setText(pinyinMode ? "拼音输入，点候选上屏" : "英文输入");
             hint.setTextSize(11);
@@ -1086,16 +1099,22 @@ public class MinimalVoiceIME extends InputMethodService {
                     com.minivoice.ime.data.PhraseStore.match(this, enBuf, 4);
             if (!hits.isEmpty()) {
                 for (com.minivoice.ime.data.PhraseStore.Phrase p : hits) {
-                    if (candList.contains(p.label)) continue;
-                    candList.add(p.label);
-                    phraseText.put(p.label, p.text);
+                    String show = p.text.replace("\n", " · ");
+                    if (candList.contains(show)) continue;
+                    candList.add(show);
+                    phraseText.put(show, p.text);
                 }
+                setCandBarHeight(60);
                 int n0 = Math.min(candList.size(), 6);
                 for (int i = 0; i < n0; i++) {
                     final String cand = candList.get(i);
                     TextView chip = new TextView(uiCtx);
                     chip.setText(cand);
-                    chip.setTextSize(14);
+                    chip.setTextSize(12);
+                    chip.setMaxLines(3);
+                    chip.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                    chip.setMaxWidth((int) (getResources().getDisplayMetrics().widthPixels * 0.75));
+                    chip.setGravity(Gravity.CENTER_VERTICAL);
                     chip.setIncludeFontPadding(false);
                     chip.setTextColor(uiCtx.getColor(R.color.accent));
                     chip.setGravity(Gravity.CENTER);
@@ -1110,6 +1129,7 @@ public class MinimalVoiceIME extends InputMethodService {
                 updateVoiceBar();
                 return;
             }
+            setCandBarHeight(36);
             TextView tv = new TextView(uiCtx);
             tv.setText(enBuf.isEmpty() ? "英文输入" : enBuf);
             tv.setTextSize(14);
@@ -1123,11 +1143,14 @@ public class MinimalVoiceIME extends InputMethodService {
         updateVoiceBar();
         phraseText.clear();
         // 个人词库和快捷输入排在候选最前面：打 fp 出来的就是发票抬头
+        boolean hasPhrase = false;
         for (com.minivoice.ime.data.PhraseStore.Phrase p :
                 com.minivoice.ime.data.PhraseStore.match(this, letters, 3)) {
-            if (candList.contains(p.label)) continue;
-            candList.add(p.label);
-            phraseText.put(p.label, p.text);
+            String show = p.text.replace("\n", " · ");
+            if (candList.contains(show)) continue;
+            candList.add(show);
+            phraseText.put(show, p.text);
+            hasPhrase = true;
         }
         for (String c : com.minivoice.ime.input.PinyinDict.get(this).candidates(letters, 18)) {
             if (!candList.contains(c)) candList.add(c);
@@ -1142,16 +1165,21 @@ public class MinimalVoiceIME extends InputMethodService {
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
             return;
         }
+        setCandBarHeight(hasPhrase ? 60 : 36);
         int n = Math.min(candList.size(), 14);
         for (int i = 0; i < n; i++) {
             final String cand = candList.get(i);
+            boolean isPhrase = phraseText.containsKey(cand);
             TextView tv = new TextView(uiCtx);
             tv.setText(cand);
-            tv.setTextSize(16);
+            tv.setTextSize(isPhrase ? 12 : 16);
             tv.setIncludeFontPadding(false);
-            tv.setTextColor(uiCtx.getColor(R.color.text_primary));
-            tv.setGravity(Gravity.CENTER);
-            tv.setPadding(dp(10), 0, dp(10), 0);
+            tv.setTextColor(uiCtx.getColor(isPhrase ? R.color.accent : R.color.text_primary));
+            tv.setGravity(Gravity.CENTER_VERTICAL);
+            tv.setMaxLines(isPhrase ? 3 : 1);
+            tv.setEllipsize(isPhrase ? android.text.TextUtils.TruncateAt.END : null);
+            tv.setMaxWidth((int) (getResources().getDisplayMetrics().widthPixels * 0.75));
+            tv.setPadding(dp(10), 0, dp(isPhrase ? 14 : 10), 0);
             tv.setOnClickListener(v -> {
                 v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                 commitCandidate(cand);
