@@ -70,6 +70,7 @@ public class SettingsActivity extends AppCompatActivity {
     private LinearLayout llTokens;
     private TextView tvTokens;
     private Button btnTokenLog;
+    private TextView tvPolishRules;
     private TextView tvPeers;
     private LinearLayout llPeers;
     private ImageButton btnEye;
@@ -140,6 +141,8 @@ public class SettingsActivity extends AppCompatActivity {
         llTokens = findViewById(R.id.ll_tokens);
         tvTokens = findViewById(R.id.tv_tokens);
         btnTokenLog = findViewById(R.id.btn_token_log);
+        tvPolishRules = findViewById(R.id.tv_polish_rules);
+        tvPolishRules.setOnClickListener(v -> showPolishRules());
         btnTokenLog.setOnClickListener(v -> showTokenLog());
         rgLlmTier.setOnCheckedChangeListener((g, id) -> {
             Prefs.putString(this, Prefs.K_LLM_TIER,
@@ -531,6 +534,69 @@ public class SettingsActivity extends AppCompatActivity {
 
     private int dp2(float v) {
         return (int) (getResources().getDisplayMetrics().density * v);
+    }
+
+    /** 把当前整理引擎真正在用的那套规则摊开给用户看。 */
+    private void showPolishRules() {
+        boolean local = "local".equals(Prefs.getString(this, Prefs.K_POLISH_ENGINE, "cloud"));
+        String tip = local ? "本地整理用的规则" : "云端整理用的规则";
+        String body = local
+                ? com.minivoice.ime.asr.LlmPolisher.rulesText()
+                : com.minivoice.ime.asr.TextPolisher.rulesText();
+
+        final android.app.Dialog d = new android.app.Dialog(this);
+        android.widget.LinearLayout box = new android.widget.LinearLayout(this);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int pad = dp(18);
+        box.setPadding(pad, pad, pad, pad);
+
+        android.widget.LinearLayout headRow = new android.widget.LinearLayout(this);
+        headRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        headRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        android.widget.TextView head = new android.widget.TextView(this);
+        head.setText("整理规则");
+        head.setTextSize(16);
+        head.setTextColor(getColor(R.color.text_primary));
+        head.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        headRow.addView(head);
+        android.widget.TextView close = new android.widget.TextView(this);
+        close.setText("关闭");
+        close.setTextSize(12);
+        close.setTextColor(getColor(R.color.text_secondary));
+        close.setPadding(dp(8), 0, 0, 0);
+        close.setOnClickListener(v -> d.dismiss());
+        headRow.addView(close);
+        box.addView(headRow);
+
+        android.widget.TextView sub = new android.widget.TextView(this);
+        sub.setText(tip);
+        sub.setTextSize(11);
+        sub.setTextColor(getColor(R.color.text_secondary));
+        sub.setPadding(0, dp(6), 0, dp(8));
+        box.addView(sub);
+
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        android.widget.TextView tv = new android.widget.TextView(this);
+        tv.setText(body);
+        tv.setTextSize(12);
+        tv.setTextColor(getColor(R.color.text_primary));
+        tv.setLineSpacing(dp(4), 1f);
+        sv.addView(tv);
+        box.addView(sv, new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(getColor(R.color.card_bg));
+        bg.setCornerRadius(dp(18));
+        d.getWindow().setBackgroundDrawable(bg);
+        d.setContentView(box);
+        d.setCanceledOnTouchOutside(true);
+        android.view.Window w = d.getWindow();
+        w.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.9),
+                (int) (getResources().getDisplayMetrics().heightPixels * 0.68));
+        w.setGravity(android.view.Gravity.CENTER);
+        d.show();
     }
 
     /** 把规格、说明文字、地址框的提示都刷成当前档的样子。 */

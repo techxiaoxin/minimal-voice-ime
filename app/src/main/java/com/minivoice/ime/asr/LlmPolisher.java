@@ -26,6 +26,11 @@ public final class LlmPolisher {
     private static volatile boolean tried = false;
     private static volatile String loadedPath = null;
 
+    /** 给设置页看整理规则用。 */
+    public static String rulesText() {
+        return SYSTEM;
+    }
+
     private LlmPolisher() {
     }
 

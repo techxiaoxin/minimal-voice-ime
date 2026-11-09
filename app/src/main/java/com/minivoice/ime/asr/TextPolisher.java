@@ -49,6 +49,11 @@ public final class TextPolisher {
 
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
+    /** 给设置页看整理规则用。 */
+    public static String rulesText() {
+        return SYSTEM;
+    }
+
     private TextPolisher() {
     }
 
