@@ -79,6 +79,13 @@
             </LinearLayout>
             <LinearLayout android:id="@+id/group_more" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:background="@drawable/bg_card" android:orientation="vertical" android:padding="12dp">
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="词库与快捷输入" android:textColor="@color/text_primary" android:textSize="13sp" />
+                    <TextView android:id="@+id/tv_phrase_personal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="个人词库" android:textColor="@color/text_primary" android:textSize="13sp" android:paddingTop="4dp" android:paddingBottom="4dp" />
+                    <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginTop="4dp" android:layout_marginBottom="4dp" android:background="@color/divider" />
+                    <TextView android:id="@+id/tv_phrase_quick" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="快捷输入" android:textColor="@color/text_primary" android:textSize="13sp" android:paddingTop="4dp" android:paddingBottom="4dp" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="打缩写就出内容：发票抬头存成 fp，手机号存成 sjh，打字时打成这几个字母，候选条第一排就是它。" android:textColor="@color/text_secondary" android:textSize="11sp" />
+                </LinearLayout>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:background="@drawable/bg_card" android:orientation="vertical" android:padding="12dp">
                     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="键盘外观" android:textColor="@color/text_primary" android:textSize="13sp" android:layout_marginBottom="6dp" />
                     <LinearLayout android:layout_width="match_parent" android:layout_height="34dp" android:background="@drawable/bg_segment_plain" android:orientation="horizontal" android:padding="3dp">
                         <TextView android:id="@+id/chip_auto" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:background="@drawable/bg_chip_active" android:gravity="center" android:text="自动" android:textColor="@color/on_accent" android:textSize="12sp" />

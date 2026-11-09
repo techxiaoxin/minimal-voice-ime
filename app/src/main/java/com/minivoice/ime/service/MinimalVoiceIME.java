@@ -125,6 +125,8 @@ public class MinimalVoiceIME extends InputMethodService {
     private boolean shiftOn = false;
     private final StringBuilder composing = new StringBuilder();
     private final java.util.List<String> candList = new java.util.ArrayList<>();
+    /** 候选条里哪些名字是词库条目，上屏时换成对应的正文。 */
+    private final java.util.Map<String, String> phraseText = new java.util.HashMap<>();
     /** 微博里是否已经点开了表情区。切到别的 App 会自动收回。 */
     private boolean weiboExpanded = false;
     private String currentPkg = null;
@@ -873,7 +875,9 @@ public class MinimalVoiceIME extends InputMethodService {
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     handled[0] = false;
-                    v.animate().scaleX(1.08f).scaleY(1.08f).setDuration(60).start();
+                    v.setPressed(true);
+                    v.animate().scaleX(1.14f).scaleY(1.14f).alpha(0.78f)
+                            .setDuration(70).start();
                     if (longPressUppercase && longAction != null) {
                         longRunner[0] = () -> {
                             handled[0] = true;
@@ -884,7 +888,8 @@ public class MinimalVoiceIME extends InputMethodService {
                     }
                     return true;
                 case MotionEvent.ACTION_UP:
-                    v.animate().scaleX(1f).scaleY(1f).setDuration(80).start();
+                    v.setPressed(false);
+                    v.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(90).start();
                     if (longRunner[0] != null) main.removeCallbacks(longRunner[0]);
                     if (!handled[0]) {
                         v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
@@ -904,7 +909,8 @@ public class MinimalVoiceIME extends InputMethodService {
                     }
                     return true;
                 case MotionEvent.ACTION_CANCEL:
-                    v.animate().scaleX(1f).scaleY(1f).setDuration(80).start();
+                    v.setPressed(false);
+                    v.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(90).start();
                     if (longRunner[0] != null) main.removeCallbacks(longRunner[0]);
                     return true;
                 default:
@@ -1058,7 +1064,17 @@ public class MinimalVoiceIME extends InputMethodService {
             return;
         }
         updateVoiceBar();
-        candList.addAll(com.minivoice.ime.input.PinyinDict.get(this).candidates(letters, 18));
+        phraseText.clear();
+        // 个人词库和快捷输入排在候选最前面：打 fp 出来的就是发票抬头
+        for (com.minivoice.ime.data.PhraseStore.Phrase p :
+                com.minivoice.ime.data.PhraseStore.match(this, letters, 3)) {
+            if (candList.contains(p.label)) continue;
+            candList.add(p.label);
+            phraseText.put(p.label, p.text);
+        }
+        for (String c : com.minivoice.ime.input.PinyinDict.get(this).candidates(letters, 18)) {
+            if (!candList.contains(c)) candList.add(c);
+        }
         if (candList.isEmpty()) {
             TextView tv = new TextView(uiCtx);
             tv.setText(letters + " 没有候选");
@@ -1091,7 +1107,8 @@ public class MinimalVoiceIME extends InputMethodService {
     private void commitCandidate(String cand) {
         InputConnection ic = getCurrentInputConnection();
         if (ic == null) return;
-        ic.commitText(cand, 1);
+        String body = phraseText.containsKey(cand) ? phraseText.get(cand) : cand;
+        ic.commitText(body, 1);
         composing.setLength(0);
         candList.clear();
         refreshCand();

@@ -71,6 +71,8 @@ public class SettingsActivity extends AppCompatActivity {
     private TextView tvTokens;
     private Button btnTokenLog;
     private TextView tvPolishRules;
+    private TextView tvPhrasePersonal;
+    private TextView tvPhraseQuick;
     private TextView tvPeers;
     private LinearLayout llPeers;
     private ImageButton btnEye;
@@ -143,6 +145,12 @@ public class SettingsActivity extends AppCompatActivity {
         btnTokenLog = findViewById(R.id.btn_token_log);
         tvPolishRules = findViewById(R.id.tv_polish_rules);
         tvPolishRules.setOnClickListener(v -> showPolishRules());
+        tvPhrasePersonal = findViewById(R.id.tv_phrase_personal);
+        tvPhrasePersonal.setOnClickListener(v ->
+                showPhraseList(com.minivoice.ime.data.PhraseStore.TYPE_PERSONAL));
+        tvPhraseQuick = findViewById(R.id.tv_phrase_quick);
+        tvPhraseQuick.setOnClickListener(v ->
+                showPhraseList(com.minivoice.ime.data.PhraseStore.TYPE_QUICK));
         btnTokenLog.setOnClickListener(v -> showTokenLog());
         rgLlmTier.setOnCheckedChangeListener((g, id) -> {
             Prefs.putString(this, Prefs.K_LLM_TIER,
@@ -1351,5 +1359,354 @@ public class SettingsActivity extends AppCompatActivity {
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
             if (ok) Prefs.markPendingSync(this, false);
         });
+    }
+
+    // ---------------- 个人词库 / 快捷输入 ----------------
+
+    /** 一类词条的列表：点一行改一条，右上角能删，底下来新增或者 AI 整理。 */
+    private void showPhraseList(String type) {
+        final boolean personal = com.minivoice.ime.data.PhraseStore.TYPE_PERSONAL.equals(type);
+        final android.app.Dialog d = new android.app.Dialog(this);
+        android.widget.LinearLayout box = new android.widget.LinearLayout(this);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int pad = dp(16);
+        box.setPadding(pad, pad, pad, pad);
+        box.setBackgroundColor(getColor(R.color.card_bg));
+
+        android.widget.LinearLayout headRow = new android.widget.LinearLayout(this);
+        headRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        headRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        android.widget.TextView head = new android.widget.TextView(this);
+        head.setText(personal ? "个人词库" : "快捷输入");
+        head.setTextSize(16);
+        head.setTextColor(getColor(R.color.text_primary));
+        head.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        headRow.addView(head);
+
+        android.widget.TextView close = new android.widget.TextView(this);
+        close.setText("关闭");
+        close.setTextSize(12);
+        close.setTextColor(getColor(R.color.text_secondary));
+        close.setPadding(dp(10), dp(4), 0, dp(4));
+        headRow.addView(close);
+        box.addView(headRow);
+
+        android.widget.TextView sub = new android.widget.TextView(this);
+        sub.setText(personal
+                ? "发票抬头、税号、手机号这类自己的固定信息，打字时打缩写就出。"
+                : "常用回复、地址、套话这类整段文字，打字时打缩写就出。");
+        sub.setTextSize(11);
+        sub.setTextColor(getColor(R.color.text_secondary));
+        sub.setPadding(0, dp(6), 0, dp(10));
+        box.addView(sub);
+
+        android.widget.LinearLayout listBox = new android.widget.LinearLayout(this);
+        listBox.setOrientation(android.widget.LinearLayout.VERTICAL);
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(listBox);
+        box.addView(sv, new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        final Runnable[] refresh = new Runnable[1];
+        refresh[0] = () -> {
+            listBox.removeAllViews();
+            java.util.List<com.minivoice.ime.data.PhraseStore.Phrase> items =
+                    com.minivoice.ime.data.PhraseStore.byType(this, type);
+            if (items.isEmpty()) {
+                android.widget.TextView empty = new android.widget.TextView(this);
+                empty.setText("还没有内容，点下面的按钮加一条，或者粘一段文字让 AI 整理。");
+                empty.setTextSize(12);
+                empty.setTextColor(getColor(R.color.text_hint));
+                empty.setPadding(0, dp(10), 0, dp(10));
+                listBox.addView(empty);
+                return;
+            }
+            for (com.minivoice.ime.data.PhraseStore.Phrase p : items) {
+                android.widget.LinearLayout row = new android.widget.LinearLayout(this);
+                row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+                row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+                row.setPadding(0, dp(8), 0, dp(8));
+
+                android.widget.LinearLayout col = new android.widget.LinearLayout(this);
+                col.setOrientation(android.widget.LinearLayout.VERTICAL);
+                android.widget.TextView name = new android.widget.TextView(this);
+                name.setText((p.code.isEmpty() ? "（没缩写）" : p.code) + "  " + p.label);
+                name.setTextSize(13);
+                name.setTextColor(getColor(R.color.text_primary));
+                col.addView(name);
+
+                android.widget.TextView preview = new android.widget.TextView(this);
+                String one = p.text.replace("\n", " / ");
+                if (one.length() > 24) one = one.substring(0, 24) + "…";
+                preview.setText(one);
+                preview.setTextSize(11);
+                preview.setTextColor(getColor(R.color.text_secondary));
+                preview.setSingleLine(true);
+                col.addView(preview);
+                row.addView(col, new android.widget.LinearLayout.LayoutParams(
+                        0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+                android.widget.TextView del = new android.widget.TextView(this);
+                del.setText("删除");
+                del.setTextSize(11);
+                del.setTextColor(getColor(R.color.text_secondary));
+                del.setPadding(dp(10), dp(6), dp(4), dp(6));
+                del.setOnClickListener(v -> {
+                    com.minivoice.ime.data.PhraseStore.remove(this, p);
+                    refresh[0].run();
+                });
+                row.addView(del);
+
+                row.setOnClickListener(v -> showPhraseEdit(p, type, refresh[0]));
+                listBox.addView(row);
+
+                android.view.View line = new android.view.View(this);
+                line.setBackgroundColor(getColor(R.color.divider));
+                listBox.addView(line, new android.widget.LinearLayout.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp2(0.5f)));
+            }
+        };
+        refresh[0].run();
+
+        android.widget.LinearLayout btnRow = new android.widget.LinearLayout(this);
+        btnRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        android.widget.Button add = new android.widget.Button(this);
+        add.setText("新增一条");
+        add.setTextSize(12);
+        add.setAllCaps(false);
+        add.setBackgroundResource(R.drawable.bg_btn_secondary);
+        add.setTextColor(getColor(R.color.text_primary));
+        btnRow.addView(add, new android.widget.LinearLayout.LayoutParams(
+                0, dp(40), 1f));
+
+        android.widget.Button ai = new android.widget.Button(this);
+        ai.setText("AI 整理导入");
+        ai.setTextSize(12);
+        ai.setAllCaps(false);
+        ai.setTextColor(getColor(R.color.text_primary));
+        ai.setBackgroundResource(R.drawable.bg_btn_secondary);
+        android.widget.LinearLayout.LayoutParams aiLp = new android.widget.LinearLayout.LayoutParams(
+                0, dp(40), 1f);
+        aiLp.setMargins(dp(8), 0, 0, 0);
+        btnRow.addView(ai, aiLp);
+        box.addView(btnRow, new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        add.setOnClickListener(v -> {
+            com.minivoice.ime.data.PhraseStore.Phrase np =
+                    new com.minivoice.ime.data.PhraseStore.Phrase("", "", "", type);
+            showPhraseEdit(np, type, refresh[0]);
+        });
+        ai.setOnClickListener(v -> showPhraseImport(type, refresh[0]));
+        close.setOnClickListener(v -> d.dismiss());
+
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(getColor(R.color.card_bg));
+        bg.setCornerRadius(dp(18));
+        d.getWindow().setBackgroundDrawable(bg);
+        d.setContentView(box);
+        d.setCanceledOnTouchOutside(true);
+        android.view.Window w = d.getWindow();
+        w.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.92),
+                (int) (getResources().getDisplayMetrics().heightPixels * 0.72));
+        w.setGravity(android.view.Gravity.CENTER);
+        d.show();
+    }
+
+    /** 加一条或改一条：缩写、名称、正文。 */
+    private void showPhraseEdit(com.minivoice.ime.data.PhraseStore.Phrase p,
+                                String type, Runnable refresh) {
+        final android.app.Dialog d = new android.app.Dialog(this);
+        android.widget.LinearLayout box = new android.widget.LinearLayout(this);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int pad = dp(16);
+        box.setPadding(pad, pad, pad, pad);
+
+        android.widget.TextView head = new android.widget.TextView(this);
+        head.setText("编辑词条");
+        head.setTextSize(16);
+        head.setTextColor(getColor(R.color.text_primary));
+        box.addView(head);
+
+        android.widget.TextView tip = new android.widget.TextView(this);
+        tip.setText("缩写打几个字母就出这条，别跟别的撞了。");
+        tip.setTextSize(11);
+        tip.setTextColor(getColor(R.color.text_secondary));
+        tip.setPadding(0, dp(4), 0, dp(8));
+        box.addView(tip);
+
+        android.widget.EditText etCode = new android.widget.EditText(this);
+        etCode.setHint("缩写，比如 fp");
+        etCode.setText(p.code);
+        etCode.setTextSize(12);
+        etCode.setSingleLine(true);
+        etCode.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
+        etCode.setBackgroundResource(R.drawable.bg_input);
+        etCode.setPadding(dp(10), 0, dp(10), 0);
+        etCode.setTextColor(getColor(R.color.text_primary));
+        etCode.setHintTextColor(getColor(R.color.text_hint));
+        box.addView(etCode, new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp(40)));
+
+        android.widget.EditText etLabel = new android.widget.EditText(this);
+        etLabel.setHint("名称，比如 公司开票信息");
+        etLabel.setText(p.label);
+        etLabel.setTextSize(12);
+        etLabel.setSingleLine(true);
+        etLabel.setBackgroundResource(R.drawable.bg_input);
+        etLabel.setPadding(dp(10), 0, dp(10), 0);
+        etLabel.setTextColor(getColor(R.color.text_primary));
+        etLabel.setHintTextColor(getColor(R.color.text_hint));
+        android.widget.LinearLayout.LayoutParams labelLp = new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp(40));
+        labelLp.setMargins(0, dp(8), 0, 0);
+        box.addView(etLabel, labelLp);
+
+        android.widget.EditText etText = new android.widget.EditText(this);
+        etText.setHint("正文，上屏的内容");
+        etText.setText(p.text);
+        etText.setTextSize(12);
+        etText.setGravity(android.view.Gravity.TOP | android.view.Gravity.START);
+        etText.setBackgroundResource(R.drawable.bg_input);
+        etText.setPadding(dp(10), dp(8), dp(10), dp(8));
+        etText.setTextColor(getColor(R.color.text_primary));
+        etText.setHintTextColor(getColor(R.color.text_hint));
+        android.widget.LinearLayout.LayoutParams textLp = new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
+        textLp.setMargins(0, dp(8), 0, 0);
+        box.addView(etText, textLp);
+
+        android.widget.LinearLayout btnRow = new android.widget.LinearLayout(this);
+        btnRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        android.widget.Button save = new android.widget.Button(this);
+        save.setText("保存");
+        save.setTextSize(12);
+        save.setAllCaps(false);
+        save.setTextColor(getColor(R.color.on_accent));
+        save.setBackgroundResource(R.drawable.bg_btn_primary);
+        btnRow.addView(save, new android.widget.LinearLayout.LayoutParams(
+                0, dp(40), 1f));
+        box.addView(btnRow, new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        save.setOnClickListener(v -> {
+            String code = etCode.getText().toString().trim().toLowerCase()
+                    .replaceAll("[^a-z0-9]", "");
+            String label = etLabel.getText().toString().trim();
+            String text = etText.getText().toString().trim();
+            if (code.isEmpty() || text.isEmpty()) {
+                android.widget.Toast.makeText(this, "缩写和正文都要填",
+                        android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
+            if (label.isEmpty()) label = code;
+            com.minivoice.ime.data.PhraseStore.Phrase np =
+                    new com.minivoice.ime.data.PhraseStore.Phrase(code, label, text, type);
+            if (!p.code.isEmpty() || !p.text.isEmpty()) {
+                com.minivoice.ime.data.PhraseStore.remove(this, p);
+            }
+            com.minivoice.ime.data.PhraseStore.addAll(this,
+                    java.util.Collections.singletonList(np));
+            d.dismiss();
+            if (refresh != null) refresh.run();
+        });
+
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(getColor(R.color.card_bg));
+        bg.setCornerRadius(dp(18));
+        d.getWindow().setBackgroundDrawable(bg);
+        d.setContentView(box);
+        d.setCanceledOnTouchOutside(true);
+        android.view.Window w = d.getWindow();
+        w.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.92),
+                (int) (getResources().getDisplayMetrics().heightPixels * 0.6));
+        w.setGravity(android.view.Gravity.CENTER);
+        d.show();
+    }
+
+    /** 粘一段杂七杂八的内容，交给模型拆成一条条词库。 */
+    private void showPhraseImport(String type, Runnable refresh) {
+        final android.app.Dialog d = new android.app.Dialog(this);
+        android.widget.LinearLayout box = new android.widget.LinearLayout(this);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int pad = dp(16);
+        box.setPadding(pad, pad, pad, pad);
+
+        android.widget.TextView head = new android.widget.TextView(this);
+        head.setText("AI 整理导入");
+        head.setTextSize(16);
+        head.setTextColor(getColor(R.color.text_primary));
+        box.addView(head);
+
+        android.widget.TextView tip = new android.widget.TextView(this);
+        tip.setText("把一堆信息粘进来，模型会拆成缩写、名称、正文三段。手机号、税号这类数字保持原样。");
+        tip.setTextSize(11);
+        tip.setTextColor(getColor(R.color.text_secondary));
+        tip.setPadding(0, dp(4), 0, dp(8));
+        box.addView(tip);
+
+        android.widget.EditText et = new android.widget.EditText(this);
+        et.setHint("粘在这里，一行一条也行，一大段也行");
+        et.setTextSize(12);
+        et.setGravity(android.view.Gravity.TOP | android.view.Gravity.START);
+        et.setBackgroundResource(R.drawable.bg_input);
+        et.setPadding(dp(10), dp(8), dp(10), dp(8));
+        et.setTextColor(getColor(R.color.text_primary));
+        et.setHintTextColor(getColor(R.color.text_hint));
+        box.addView(et, new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        final android.widget.TextView status = new android.widget.TextView(this);
+        status.setTextSize(11);
+        status.setTextColor(getColor(R.color.text_secondary));
+        status.setPadding(0, dp(8), 0, 0);
+        box.addView(status);
+
+        android.widget.Button go = new android.widget.Button(this);
+        go.setText("开始整理");
+        go.setTextSize(12);
+        go.setAllCaps(false);
+        go.setTextColor(getColor(R.color.on_accent));
+        go.setBackgroundResource(R.drawable.bg_btn_primary);
+        android.widget.LinearLayout.LayoutParams goLp = new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp(40));
+        goLp.setMargins(0, dp(8), 0, 0);
+        box.addView(go, goLp);
+
+        go.setOnClickListener(v -> {
+            String raw = et.getText().toString().trim();
+            if (raw.isEmpty()) {
+                status.setText("先粘点内容进来");
+                return;
+            }
+            go.setEnabled(false);
+            status.setText("正在整理…");
+            com.minivoice.ime.data.PhraseAi.extract(this, type, raw, (entries, note) -> {
+                go.setEnabled(true);
+                status.setText(note);
+                if (!entries.isEmpty()) {
+                    com.minivoice.ime.data.PhraseStore.addAll(this, entries);
+                    if (refresh != null) refresh.run();
+                    d.dismiss();
+                    android.widget.Toast.makeText(this, note,
+                            android.widget.Toast.LENGTH_SHORT).show();
+                }
+            });
+        });
+
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(getColor(R.color.card_bg));
+        bg.setCornerRadius(dp(18));
+        d.getWindow().setBackgroundDrawable(bg);
+        d.setContentView(box);
+        d.setCanceledOnTouchOutside(true);
+        android.view.Window w = d.getWindow();
+        w.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.92),
+                (int) (getResources().getDisplayMetrics().heightPixels * 0.66));
+        w.setGravity(android.view.Gravity.CENTER);
+        d.show();
     }
 }
