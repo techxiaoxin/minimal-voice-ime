@@ -26,6 +26,7 @@ import com.minivoice.ime.ui.MarqueeDrawable;
 import com.minivoice.ime.ui.WaveformDrawable;
 
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
@@ -111,6 +112,18 @@ public class MinimalVoiceIME extends InputMethodService {
     private static final int PANEL_MAX_DP = 320;
 
     private boolean numbersOpen = false;
+
+    // 全键盘打字：默认中文拼音，点中英键切成英文直出
+    private LinearLayout llFull;
+    private LinearLayout llCandBar;
+    private LinearLayout llFullRows;
+    private View flKeysRow;
+    private boolean fullMode = false;
+    private boolean pinyinMode = true;
+    private boolean symbolLayer = false;
+    private boolean shiftOn = false;
+    private final StringBuilder composing = new StringBuilder();
+    private final java.util.List<String> candList = new java.util.ArrayList<>();
     /** 微博里是否已经点开了表情区。切到别的 App 会自动收回。 */
     private boolean weiboExpanded = false;
     private String currentPkg = null;
@@ -234,6 +247,7 @@ public class MinimalVoiceIME extends InputMethodService {
         });
 
         buildNumberPad();
+        buildFullKeyboard(root);
         bindVoiceButton();
         bindDeleteButton();
         bindSendButton();
@@ -242,7 +256,7 @@ public class MinimalVoiceIME extends InputMethodService {
         tintNavigationBar();
 
         // 重进键盘时保持 123 展开状态
-        applyModeState(numbersOpen);
+        applyModeState(fullMode);
         refreshStatus(getString(R.string.voice_hint));
         inputRoot = root;
         return root;
@@ -292,6 +306,7 @@ public class MinimalVoiceIME extends InputMethodService {
             showBusy(false);
         }
         currentPkg = info != null ? info.packageName : null;
+        if (fullMode) clearComposing();
         hideQuickPanel();
         applyPanelMode();
     }
@@ -581,22 +596,30 @@ public class MinimalVoiceIME extends InputMethodService {
     /** 文字态显示 123，按下去进数字行；数字态显示麦克风，按下去回语音。 */
     private void bindModeButton() {
         btnMode.setOnClickListener(v -> {
-            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-            numbersOpen = !numbersOpen;
-            applyModeState(numbersOpen);
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+            boolean toFull = !fullMode;
+            if (toFull) clearComposing();
+            applyModeState(toFull);
             vibrate(10);
         });
     }
 
-    private void applyModeState(boolean numbers) {
+    private void applyModeState(boolean full) {
+        fullMode = full;
         if (llNumbers != null) {
-            llNumbers.setVisibility(numbers ? View.VISIBLE : View.GONE);
+            llNumbers.setVisibility(View.GONE);
+        }
+        if (llFull != null) {
+            llFull.setVisibility(full ? View.VISIBLE : View.GONE);
+        }
+        if (flKeysRow != null) {
+            flKeysRow.setVisibility(full ? View.GONE : View.VISIBLE);
         }
         if (tvModeLabel != null) {
-            tvModeLabel.setVisibility(numbers ? View.GONE : View.VISIBLE);
+            tvModeLabel.setVisibility(full ? View.GONE : View.VISIBLE);
         }
         if (ivModeIcon != null) {
-            ivModeIcon.setVisibility(numbers ? View.VISIBLE : View.GONE);
+            ivModeIcon.setVisibility(full ? View.VISIBLE : View.GONE);
         }
     }
 
@@ -673,6 +696,274 @@ public class MinimalVoiceIME extends InputMethodService {
         }
     }
 
+
+
+    // ============ 全键盘打字 ============
+
+    /** 全键盘整块：上面一条候选栏，下面四排键，藏起来时不影响原来那条极简键盘。 */
+    private void buildFullKeyboard(View root) {
+        flKeysRow = root.findViewById(R.id.fl_keys);
+        if (flKeysRow == null || !(flKeysRow.getParent() instanceof LinearLayout)) return;
+        LinearLayout parent = (LinearLayout) flKeysRow.getParent();
+
+        llFull = new LinearLayout(uiCtx);
+        llFull.setOrientation(LinearLayout.VERTICAL);
+        llFull.setVisibility(View.GONE);
+
+        android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(uiCtx);
+        hs.setHorizontalScrollBarEnabled(false);
+        llCandBar = new LinearLayout(uiCtx);
+        llCandBar.setOrientation(LinearLayout.HORIZONTAL);
+        llCandBar.setGravity(Gravity.CENTER_VERTICAL);
+        llCandBar.setPadding(dp(6), 0, dp(6), 0);
+        hs.addView(llCandBar, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        llFull.addView(hs, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(40)));
+
+        llFullRows = new LinearLayout(uiCtx);
+        llFullRows.setOrientation(LinearLayout.VERTICAL);
+        llFull.addView(llFullRows, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        rebuildFullRows();
+        refreshCand();
+
+        int idx = parent.indexOfChild(flKeysRow);
+        parent.addView(llFull, idx, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+    }
+
+    private void rebuildFullRows() {
+        if (llFullRows == null) return;
+        llFullRows.removeAllViews();
+        if (symbolLayer) {
+            addKeyRow(new String[]{"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"}, 1f);
+            addKeyRow(new String[]{"，", "。", "？", "！", "、", "：", "；", "（", "）", "~"}, 1f);
+            buildBottomRow("符号");
+        } else if (pinyinMode || shiftOn) {
+            addKeyRow(new String[]{"q", "w", "e", "r", "t", "y", "u", "i", "o", "p"}, 1f);
+            addKeyRow(new String[]{"a", "s", "d", "f", "g", "h", "j", "k", "l"}, 1f);
+            buildShiftRow();
+            buildBottomRow("字母");
+        } else {
+            addKeyRow(new String[]{"q", "w", "e", "r", "t", "y", "u", "i", "o", "p"}, 1f);
+            addKeyRow(new String[]{"a", "s", "d", "f", "g", "h", "j", "k", "l"}, 1f);
+            buildShiftRow();
+            buildBottomRow("字母");
+        }
+    }
+
+    private void addKeyRow(String[] keys, float weight) {
+        LinearLayout row = new LinearLayout(uiCtx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(44)));
+        for (String k : keys) {
+            row.addView(mkKey(shiftOn && !pinyinMode ? k.toUpperCase() : k, weight,
+                    onLetterRunnable(k)));
+        }
+        llFullRows.addView(row);
+    }
+
+    private Runnable onLetterRunnable(final String key) {
+        return () -> onFullLetter(key);
+    }
+
+    private void buildShiftRow() {
+        LinearLayout row = new LinearLayout(uiCtx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(44)));
+        row.addView(mkKey(shiftOn ? "⬆" : "⇧", 1.2f, () -> {
+            shiftOn = !shiftOn;
+            rebuildFullRows();
+        }));
+        String[] mid = {"z", "x", "c", "v", "b", "n", "m"};
+        for (String k : mid) {
+            row.addView(mkKey(shiftOn && !pinyinMode ? k.toUpperCase() : k, 1f,
+                    onLetterRunnable(k)));
+        }
+        row.addView(mkKey("⌫", 1.2f, this::fullDelete));
+        llFullRows.addView(row);
+    }
+
+    private void buildBottomRow(String kind) {
+        LinearLayout row = new LinearLayout(uiCtx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(44)));
+        if (symbolLayer) {
+            row.addView(mkKey("ABC", 1.3f, () -> {
+                symbolLayer = false;
+                rebuildFullRows();
+            }));
+        } else {
+            row.addView(mkKey(pinyinMode ? "中" : "英", 1.3f, () -> {
+                pinyinMode = !pinyinMode;
+                shiftOn = false;
+                clearComposing();
+                rebuildFullRows();
+                refreshCand();
+            }));
+            row.addView(mkKey("123", 1.1f, () -> {
+                symbolLayer = true;
+                clearComposing();
+                rebuildFullRows();
+            }));
+        }
+        row.addView(mkKey("空格", 2.6f, this::fullSpace));
+        if (symbolLayer) {
+            row.addView(mkKey("⌫", 1.2f, this::fullDelete));
+        }
+        row.addView(mkKey("语音", 1.2f, () -> {
+            clearComposing();
+            applyModeState(false);
+        }));
+        row.addView(mkKey("发送", 1.3f, this::fullEnter));
+        llFullRows.addView(row);
+    }
+
+    private TextView mkKey(String label, float weight, Runnable action) {
+        TextView tv = new TextView(uiCtx);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.MATCH_PARENT, weight);
+        lp.setMargins(dp(2), dp(2), dp(2), dp(2));
+        tv.setLayoutParams(lp);
+        tv.setGravity(Gravity.CENTER);
+        tv.setText(label);
+        tv.setTextSize(label.length() > 1 ? 12 : 16);
+        tv.setIncludeFontPadding(false);
+        tv.setTextColor(uiCtx.getColor(R.color.key_text));
+        tv.setBackgroundResource(R.drawable.bg_btn);
+        tv.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+            action.run();
+            vibrate(8);
+        });
+        return tv;
+    }
+
+    /** 拼音一个字母一个字母往里拼，整串交给 setComposingText，选字时直接替换掉。 */
+    private void onFullLetter(String key) {
+        InputConnection ic = getCurrentInputConnection();
+        if (ic == null) return;
+        if (!pinyinMode || symbolLayer) {
+            ic.commitText(shiftOn ? key.toUpperCase() : key, 1);
+            return;
+        }
+        composing.append(key.toLowerCase());
+        ic.setComposingText(composing.toString(), 1);
+        refreshCand();
+    }
+
+    private void fullDelete() {
+        InputConnection ic = getCurrentInputConnection();
+        if (ic == null) return;
+        if (composing.length() > 0) {
+            composing.setLength(composing.length() - 1);
+            if (composing.length() == 0) {
+                ic.setComposingText("", 1);
+            } else {
+                ic.setComposingText(composing.toString(), 1);
+            }
+            refreshCand();
+            return;
+        }
+        deleteOnce();
+    }
+
+    private void fullSpace() {
+        if (composing.length() > 0 && !candList.isEmpty()) {
+            commitCandidate(candList.get(0));
+            return;
+        }
+        insertSpace();
+    }
+
+    private void fullEnter() {
+        clearComposing();
+        performSend();
+    }
+
+    private void clearComposing() {
+        composing.setLength(0);
+        candList.clear();
+        refreshCand();
+    }
+
+    private void refreshCand() {
+        if (llCandBar == null) return;
+        llCandBar.removeAllViews();
+        candList.clear();
+        if (composing.length() == 0) {
+            TextView hint = new TextView(uiCtx);
+            hint.setText(pinyinMode ? "拼音输入，直接点候选字上屏" : "英文输入");
+            hint.setTextSize(11);
+            hint.setTextColor(uiCtx.getColor(R.color.text_secondary));
+            hint.setPadding(dp(6), 0, dp(6), 0);
+            hint.setGravity(Gravity.CENTER_VERTICAL);
+            llCandBar.addView(hint, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            llCandBar.post(() -> {
+                TextView t = composePreview;
+                if (t != null) t.setText("");
+            });
+            return;
+        }
+        String letters = composing.toString();
+        if (!pinyinMode) {
+            TextView tv = new TextView(uiCtx);
+            tv.setText(letters);
+            tv.setTextSize(15);
+            tv.setTextColor(uiCtx.getColor(R.color.text_primary));
+            tv.setPadding(dp(8), 0, dp(8), 0);
+            tv.setGravity(Gravity.CENTER_VERTICAL);
+            llCandBar.addView(tv, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            return;
+        }
+        candList.addAll(com.minivoice.ime.input.PinyinDict.get(this).candidates(letters, 18));
+        if (candList.isEmpty()) {
+            TextView tv = new TextView(uiCtx);
+            tv.setText(letters + " 没有候选，可切英文或继续拼");
+            tv.setTextSize(11);
+            tv.setTextColor(uiCtx.getColor(R.color.text_secondary));
+            tv.setPadding(dp(8), 0, dp(8), 0);
+            tv.setGravity(Gravity.CENTER_VERTICAL);
+            llCandBar.addView(tv, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            return;
+        }
+        int n = Math.min(candList.size(), 14);
+        for (int i = 0; i < n; i++) {
+            final String cand = candList.get(i);
+            TextView tv = new TextView(uiCtx);
+            tv.setText(cand);
+            tv.setTextSize(16);
+            tv.setIncludeFontPadding(false);
+            tv.setTextColor(uiCtx.getColor(R.color.text_primary));
+            tv.setGravity(Gravity.CENTER);
+            tv.setPadding(dp(9), 0, dp(9), 0);
+            tv.setOnClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                commitCandidate(cand);
+            });
+            llCandBar.addView(tv, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+    }
+
+    private TextView composePreview;
+
+    private void commitCandidate(String cand) {
+        InputConnection ic = getCurrentInputConnection();
+        if (ic == null) return;
+        ic.commitText(cand, 1);
+        composing.setLength(0);
+        candList.clear();
+        refreshCand();
+    }
 
     private void onNumberKey(String key) {
         commitKey(key);
