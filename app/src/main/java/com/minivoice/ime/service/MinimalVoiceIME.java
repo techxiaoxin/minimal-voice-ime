@@ -239,11 +239,6 @@ public class MinimalVoiceIME extends InputMethodService {
             hideQuickPanel();
             openSettings();
         });
-        ivExpand.setOnClickListener(v -> {
-            weiboExpanded = !weiboExpanded;
-            applyPanelMode();
-            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-        });
 
         buildNumberPad();
         buildFullKeyboard(root);
@@ -270,17 +265,15 @@ public class MinimalVoiceIME extends InputMethodService {
     private void applyPanelMode() {
         if (inputRoot == null) return;
         boolean weibo = PKG_WEIBO.equals(currentPkg);
-        // 离开微博就把展开态收回，下次回来又是极简那一条
-        if (!weibo) weiboExpanded = false;
-        if (flExpand != null) flExpand.setVisibility(weibo ? View.VISIBLE : View.GONE);
-        if (ivExpand != null) ivExpand.setRotation(weibo && weiboExpanded ? 180f : 0f);
+        // 展开的小箭头撤了，微博要看表情就直接进全键盘，靠全键盘把它撑开
+        if (flExpand != null) flExpand.setVisibility(View.GONE);
         int target = 0;
-        if (weibo && weiboExpanded) {
+        if (weibo && fullMode) {
             target = Math.min(getResources().getDisplayMetrics().heightPixels * 44 / 100, dp(PANEL_MAX_DP));
         }
         inputRoot.setMinimumHeight(target);
         if (inputRoot instanceof LinearLayout) {
-            ((LinearLayout) inputRoot).setGravity(weibo && weiboExpanded ? Gravity.BOTTOM : Gravity.TOP);
+            ((LinearLayout) inputRoot).setGravity(weibo && fullMode ? Gravity.BOTTOM : Gravity.TOP);
         }
     }
 
@@ -599,6 +592,7 @@ public class MinimalVoiceIME extends InputMethodService {
             boolean toFull = !fullMode;
             if (toFull) clearComposing();
             applyModeState(toFull);
+            applyPanelMode();
             vibrate(10);
         });
     }
@@ -699,7 +693,7 @@ public class MinimalVoiceIME extends InputMethodService {
 
     // ============ 全键盘打字 ============
 
-    /** 全键盘：候选条 + 一排数字 + 三排字母，叠在原来那条语音键盘上方，不额外加底栏。 */
+    /** 全键盘：候选条 + 数字行 + 三排字母（末排带空格和退格），叠在语音条上方。 */
     private void buildFullKeyboard(View root) {
         flKeysRow = root.findViewById(R.id.fl_keys);
         if (flKeysRow == null || !(flKeysRow.getParent() instanceof LinearLayout)) return;
@@ -744,16 +738,17 @@ public class MinimalVoiceIME extends InputMethodService {
                 new String[]{"、", "。", "？", "！", "，", "：", "；", "“", "”", "（"});
         addLetterRow(new String[]{"a", "s", "d", "f", "g", "h", "j", "k", "l"},
                 new String[]{"）", "@", "#", "%", "&", "*", "-", "=", "+"});
-        addShiftRow();
+        addLastRow();
+        addSpaceRow();
     }
 
-    /** 数字行，全键盘自带，打数字不用切层。 */
     private void addDigitRow() {
         LinearLayout row = newRow(36);
         for (int i = 1; i <= 9; i++) {
-            row.addView(mkKey(String.valueOf(i), 1f, 14, true, onLetterRunnable(String.valueOf(i)), null));
+            row.addView(mkKey(String.valueOf(i), 1f, 14, false, null,
+                    onLetterRunnable(String.valueOf(i)), null));
         }
-        row.addView(mkKey("0", 1f, 14, true, onLetterRunnable("0"), null));
+        row.addView(mkKey("0", 1f, 14, false, null, onLetterRunnable("0"), null));
         llFullRows.addView(row);
     }
 
@@ -761,31 +756,40 @@ public class MinimalVoiceIME extends InputMethodService {
         LinearLayout row = newRow(44);
         for (int i = 0; i < letters.length; i++) {
             final String letter = letters[i];
-            String label = shiftOn && !pinyinMode ? letter.toUpperCase() : letter;
-            row.addView(mkKey(label, 1f, 17, true, onLetterRunnable(letter), puncts[i]));
+            row.addView(mkKey(letter, 1f, 16, true,
+                    () -> onFullLetter(letter.toUpperCase()), onLetterRunnable(letter), puncts[i]));
         }
         llFullRows.addView(row);
     }
 
-    private void addShiftRow() {
+    /** 最后一排：左边大小写切换，中间 z 到 m，右边中英切换。退格和下面那条重复，不再放。 */
+    private void addLastRow() {
         LinearLayout row = newRow(44);
-        row.addView(mkKey(pinyinMode ? "中" : "英", 1.1f, 14, false, () -> {
+        row.addView(mkKey(shiftOn ? "⇧" : "⇧", 1.1f, 15, false, null, () -> {
+            shiftOn = !shiftOn;
+            rebuildFullRows();
+        }, null));
+        String[] mid = {"z", "x", "c", "v", "b", "n", "m"};
+        for (String k : mid) {
+            final String letter = k;
+            String label = shiftOn && !pinyinMode ? letter.toUpperCase() : letter;
+            row.addView(mkKey(label, 1f, 16, true,
+                    () -> onFullLetter(letter.toUpperCase()), onLetterRunnable(letter), null));
+        }
+        row.addView(mkKey(pinyinMode ? "中" : "英", 1.1f, 14, false, null, () -> {
             pinyinMode = !pinyinMode;
             shiftOn = false;
             clearComposing();
             rebuildFullRows();
             refreshCand();
         }, null));
-        row.addView(mkKey("⇧", 1.1f, 15, false, () -> {
-            shiftOn = !shiftOn;
-            rebuildFullRows();
-        }, null));
-        String[] mid = {"z", "x", "c", "v", "b", "n", "m"};
-        for (String k : mid) {
-            String label = shiftOn && !pinyinMode ? k.toUpperCase() : k;
-            row.addView(mkKey(label, 1f, 17, true, onLetterRunnable(k), null));
-        }
-        row.addView(mkKey("⌫", 1.1f, 16, false, this::fullDelete, null));
+        llFullRows.addView(row);
+    }
+
+    /** 单独一条空格，轻点选字或打空格，按住说话。 */
+    private void addSpaceRow() {
+        LinearLayout row = newRow(36);
+        row.addView(mkSpaceKey());
         llFullRows.addView(row);
     }
 
@@ -803,61 +807,140 @@ public class MinimalVoiceIME extends InputMethodService {
     }
 
     /**
-     * 按键统一用 item_ime_key 这个布局解出来，跟键盘其他键一样走 XML 主题，
-     * 按下轻微放大、松手回弹；字母键还能上滑打标点。
+     * 按键统一走 item_ime_key：字母居中，右上角小字提示上滑能打的标点。
+     * 短按走 action，长按走 longAction（字母键用它出大写），字母键上滑打标点。
      */
-    private TextView mkKey(String label, float weight, int textSizeSp, boolean letter,
-                           Runnable action, String punct) {
-        TextView tv = (TextView) LayoutInflater.from(uiCtx)
+    private View mkKey(String label, float weight, int textSizeSp,
+                       boolean longPressUppercase,
+                       Runnable longAction, Runnable action, String punct) {
+        FrameLayout box = (FrameLayout) LayoutInflater.from(uiCtx)
                 .inflate(R.layout.item_ime_key, null, false);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.MATCH_PARENT, weight);
         lp.setMargins(dp(2), dp(2), dp(2), dp(2));
-        tv.setLayoutParams(lp);
-        tv.setText(label);
-        tv.setTextSize(textSizeSp);
-        if (punct != null) tv.setTag(punct);
-        tv.setOnTouchListener(new View.OnTouchListener() {
-            float downY;
+        box.setLayoutParams(lp);
+        TextView key = box.findViewById(R.id.tv_key);
+        key.setText(label);
+        key.setTextSize(textSizeSp);
+        TextView hint = box.findViewById(R.id.tv_punc);
+        if (punct == null || punct.isEmpty()) {
+            hint.setVisibility(View.GONE);
+        } else {
+            hint.setText(punct);
+        }
 
-            @Override
-            public boolean onTouch(View v, MotionEvent e) {
-                switch (e.getActionMasked()) {
-                    case MotionEvent.ACTION_DOWN:
-                        downY = e.getY();
-                        v.animate().scaleX(1.08f).scaleY(1.08f).setDuration(60).start();
-                        return true;
-                    case MotionEvent.ACTION_MOVE:
-                        return true;
-                    case MotionEvent.ACTION_UP:
-                        v.animate().scaleX(1f).scaleY(1f).setDuration(80).start();
+        final boolean[] handled = {false};
+        final Runnable[] longRunner = {null};
+        box.setOnTouchListener((v, e) -> {
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    handled[0] = false;
+                    v.animate().scaleX(1.08f).scaleY(1.08f).setDuration(60).start();
+                    if (longPressUppercase && longAction != null) {
+                        longRunner[0] = () -> {
+                            handled[0] = true;
+                            v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                            longAction.run();
+                        };
+                        main.postDelayed(longRunner[0], 380);
+                    }
+                    return true;
+                case MotionEvent.ACTION_UP:
+                    v.animate().scaleX(1f).scaleY(1f).setDuration(80).start();
+                    if (longRunner[0] != null) main.removeCallbacks(longRunner[0]);
+                    if (!handled[0]) {
                         v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-                        if (punct != null && downY - e.getY() > dp(24)) {
+                        if (punct != null && !punct.isEmpty()
+                                && e.getY() < 0) {
                             commitPunct(punct);
                         } else {
                             action.run();
                         }
                         vibrate(6);
-                        return true;
-                    case MotionEvent.ACTION_CANCEL:
-                        v.animate().scaleX(1f).scaleY(1f).setDuration(80).start();
-                        return true;
-                    default:
-                        return false;
-                }
+                    }
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    // 字母键往上滑出键面就打标点，键面上方的小字就是提示
+                    if (punct != null && !punct.isEmpty()) {
+                        v.setPressed(e.getY() < 0);
+                    }
+                    return true;
+                case MotionEvent.ACTION_CANCEL:
+                    v.animate().scaleX(1f).scaleY(1f).setDuration(80).start();
+                    if (longRunner[0] != null) main.removeCallbacks(longRunner[0]);
+                    return true;
+                default:
+                    return false;
             }
         });
-        return tv;
+        return box;
     }
 
-    /** 拼音一个字母一个字母往里拼，整串交给 setComposingText，选字时直接替换掉。 */
+    /** 空格键：轻点有候选就选第一个，没有就打空格；按住 300 毫秒开始说话，上滑取消。 */
+    private View mkSpaceKey() {
+        FrameLayout box = (FrameLayout) LayoutInflater.from(uiCtx)
+                .inflate(R.layout.item_ime_key, null, false);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 2.6f);
+        lp.setMargins(dp(2), dp(2), dp(2), dp(2));
+        box.setLayoutParams(lp);
+        TextView key = box.findViewById(R.id.tv_key);
+        key.setText("空格");
+        key.setTextSize(13);
+        box.findViewById(R.id.tv_punc).setVisibility(View.GONE);
+
+        final boolean[] started = {false};
+        final boolean[] cancelZone = {false};
+        final float[] downY = {0};
+        final Runnable[] starter = {null};
+        box.setOnTouchListener((v, e) -> {
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    downY[0] = e.getY();
+                    started[0] = false;
+                    cancelZone[0] = false;
+                    v.animate().scaleX(1.03f).scaleY(1.03f).setDuration(60).start();
+                    starter[0] = () -> {
+                        started[0] = true;
+                        startVoice();
+                    };
+                    main.postDelayed(starter[0], 300);
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    if (started[0]) {
+                        cancelZone[0] = downY[0] - e.getY() > 52 * getResources().getDisplayMetrics().density;
+                    }
+                    return true;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    v.animate().scaleX(1f).scaleY(1f).setDuration(80).start();
+                    if (starter[0] != null) main.removeCallbacks(starter[0]);
+                    if (started[0]) {
+                        started[0] = false;
+                        if (cancelZone[0]) {
+                            cancelVoice();
+                        } else {
+                            stopVoice();
+                        }
+                    } else if (e.getActionMasked() == MotionEvent.ACTION_UP) {
+                        v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                        fullSpace();
+                        vibrate(6);
+                    }
+                    return true;
+                default:
+                    return false;
+            }
+        });
+        return box;
+    }
+
     private void onFullLetter(String key) {
         InputConnection ic = getCurrentInputConnection();
         if (ic == null) return;
-        // 数字这类键不进拼音串，直接上屏
         char c0 = key.charAt(0);
         if (!pinyinMode || c0 < 'a' || c0 > 'z') {
-            ic.commitText(shiftOn ? key.toUpperCase() : key, 1);
+            ic.commitText(key, 1);
             return;
         }
         composing.append(key.toLowerCase());
@@ -889,6 +972,14 @@ public class MinimalVoiceIME extends InputMethodService {
         deleteOnce();
     }
 
+    private void fullSpace() {
+        if (composing.length() > 0 && !candList.isEmpty()) {
+            commitCandidate(candList.get(0));
+            return;
+        }
+        insertSpace();
+    }
+
     private void fullEnter() {
         clearComposing();
         performSend();
@@ -900,7 +991,6 @@ public class MinimalVoiceIME extends InputMethodService {
         refreshCand();
     }
 
-    /** 候选栏：空串给提示，有拼音就给可点的候选，点一下上屏。 */
     private void refreshCand() {
         if (llCandBar == null) return;
         llCandBar.removeAllViews();
