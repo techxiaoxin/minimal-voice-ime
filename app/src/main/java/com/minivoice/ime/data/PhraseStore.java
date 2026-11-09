@@ -127,10 +127,15 @@ public final class PhraseStore {
 
     /** 打字时用：按缩写前缀找，先匹配到的先出。 */
     public static synchronized List<Phrase> match(Context ctx, String letters, int max) {
+        return matchIn(all(ctx), letters, max);
+    }
+
+    /** 纯逻辑的匹配，输入法里和测试都走这里。 */
+    public static List<Phrase> matchIn(List<Phrase> pool, String letters, int max) {
         List<Phrase> out = new ArrayList<>();
         if (letters == null || letters.isEmpty()) return out;
         String q = letters.toLowerCase(Locale.ROOT);
-        for (Phrase p : all(ctx)) {
+        for (Phrase p : pool) {
             if (p.code == null || p.code.isEmpty()) continue;
             String c = p.code.toLowerCase(Locale.ROOT);
             if (c.startsWith(q)) {

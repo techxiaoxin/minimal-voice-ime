@@ -127,6 +127,8 @@ public class MinimalVoiceIME extends InputMethodService {
     private final java.util.List<String> candList = new java.util.ArrayList<>();
     /** 候选条里哪些名字是词库条目，上屏时换成对应的正文。 */
     private final java.util.Map<String, String> phraseText = new java.util.HashMap<>();
+    /** 英文状态没有拼音串，自己记着最近敲的字母，好用缩写换词库。 */
+    private String enBuf = "";
     /** 微博里是否已经点开了表情区。切到别的 App 会自动收回。 */
     private boolean weiboExpanded = false;
     private String currentPkg = null;
@@ -985,14 +987,36 @@ public class MinimalVoiceIME extends InputMethodService {
         char c0 = key.charAt(0);
         if (!pinyinMode || c0 < 'a' || c0 > 'z') {
             ic.commitText(key, 1);
+            if (c0 >= 'a' && c0 <= 'z') {
+                enBuf = enBuf + key.toLowerCase();
+                if (enBuf.length() > 12) enBuf = enBuf.substring(enBuf.length() - 12);
+            } else {
+                enBuf = "";
+            }
+            refreshCand();
             return;
         }
+        enBuf = "";
         composing.append(key.toLowerCase());
         ic.setComposingText(composing.toString(), 1);
         refreshCand();
     }
 
+    private void commitEnPhrase(String cand) {
+        InputConnection ic = getCurrentInputConnection();
+        if (ic == null) return;
+        String body = phraseText.containsKey(cand) ? phraseText.get(cand) : cand;
+        if (!enBuf.isEmpty()) {
+            ic.deleteSurroundingText(enBuf.length(), 0);
+        }
+        ic.commitText(body, 1);
+        enBuf = "";
+        candList.clear();
+        refreshCand();
+    }
+
     private void commitPunct(String p) {
+        enBuf = "";
         InputConnection ic = getCurrentInputConnection();
         if (ic == null) return;
         if (composing.length() > 0) {
@@ -1005,6 +1029,9 @@ public class MinimalVoiceIME extends InputMethodService {
     }
 
     private void fullDelete() {
+        if (!pinyinMode && !enBuf.isEmpty()) {
+            enBuf = enBuf.substring(0, enBuf.length() - 1);
+        }
         InputConnection ic = getCurrentInputConnection();
         if (ic == null) return;
         if (composing.length() > 0) {
@@ -1017,6 +1044,7 @@ public class MinimalVoiceIME extends InputMethodService {
     }
 
     private void fullSpace() {
+        enBuf = "";
         if (composing.length() > 0 && !candList.isEmpty()) {
             commitCandidate(candList.get(0));
             return;
@@ -1053,8 +1081,37 @@ public class MinimalVoiceIME extends InputMethodService {
         }
         String letters = composing.toString();
         if (!pinyinMode) {
+            phraseText.clear();
+            java.util.List<com.minivoice.ime.data.PhraseStore.Phrase> hits =
+                    com.minivoice.ime.data.PhraseStore.match(this, enBuf, 4);
+            if (!hits.isEmpty()) {
+                for (com.minivoice.ime.data.PhraseStore.Phrase p : hits) {
+                    if (candList.contains(p.label)) continue;
+                    candList.add(p.label);
+                    phraseText.put(p.label, p.text);
+                }
+                int n0 = Math.min(candList.size(), 6);
+                for (int i = 0; i < n0; i++) {
+                    final String cand = candList.get(i);
+                    TextView chip = new TextView(uiCtx);
+                    chip.setText(cand);
+                    chip.setTextSize(14);
+                    chip.setIncludeFontPadding(false);
+                    chip.setTextColor(uiCtx.getColor(R.color.accent));
+                    chip.setGravity(Gravity.CENTER);
+                    chip.setPadding(dp(10), 0, dp(10), 0);
+                    chip.setOnClickListener(v -> {
+                        v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                        commitEnPhrase(cand);
+                    });
+                    llCandBar.addView(chip, new LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                }
+                updateVoiceBar();
+                return;
+            }
             TextView tv = new TextView(uiCtx);
-            tv.setText(letters);
+            tv.setText(enBuf.isEmpty() ? "英文输入" : enBuf);
             tv.setTextSize(14);
             tv.setTextColor(uiCtx.getColor(R.color.text_primary));
             tv.setGravity(Gravity.CENTER_VERTICAL);

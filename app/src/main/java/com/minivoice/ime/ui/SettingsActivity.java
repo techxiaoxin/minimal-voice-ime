@@ -1363,26 +1363,55 @@ public class SettingsActivity extends AppCompatActivity {
 
     // ---------------- 个人词库 / 快捷输入 ----------------
 
-    /** 一类词条的列表：点一行改一条，右上角能删，底下来新增或者 AI 整理。 */
+    /** 统一的圆角小按钮，跟主题里那些 chip 一个风格，不用系统 Button 那种阴影。 */
+    private TextView mkChip(String text, boolean primary) {
+        TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextSize(12);
+        tv.setGravity(android.view.Gravity.CENTER);
+        tv.setIncludeFontPadding(false);
+        tv.setBackgroundResource(primary ? R.drawable.bg_btn_primary : R.drawable.bg_btn_secondary);
+        tv.setTextColor(getColor(primary ? R.color.on_accent : R.color.text_primary));
+        tv.setPadding(dp(14), 0, dp(14), 0);
+        return tv;
+    }
+
+    /** 两类词条的弹窗：顶部标题固定，内容区往下留白，两类用颜色和标签区分。 */
     private void showPhraseList(String type) {
         final boolean personal = com.minivoice.ime.data.PhraseStore.TYPE_PERSONAL.equals(type);
+        final int accent = getColor(personal ? R.color.accent : R.color.text_secondary);
         final android.app.Dialog d = new android.app.Dialog(this);
         android.widget.LinearLayout box = new android.widget.LinearLayout(this);
         box.setOrientation(android.widget.LinearLayout.VERTICAL);
-        int pad = dp(16);
-        box.setPadding(pad, pad, pad, pad);
         box.setBackgroundColor(getColor(R.color.card_bg));
+
+        // ---- 顶部标题区，固定不动 ----
+        android.widget.LinearLayout headBox = new android.widget.LinearLayout(this);
+        headBox.setOrientation(android.widget.LinearLayout.VERTICAL);
+        headBox.setPadding(dp(16), dp(14), dp(16), dp(10));
+        headBox.setBackgroundColor(getColor(R.color.card_bg));
 
         android.widget.LinearLayout headRow = new android.widget.LinearLayout(this);
         headRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
         headRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+
+        android.widget.TextView tag = new android.widget.TextView(this);
+        tag.setText(personal ? "固定信息" : "整段文字");
+        tag.setTextSize(10);
+        tag.setIncludeFontPadding(false);
+        tag.setTextColor(accent);
+        tag.setBackgroundResource(R.drawable.bg_chip_idle);
+        tag.setPadding(dp(8), dp(3), dp(8), dp(3));
+        headRow.addView(tag);
+
         android.widget.TextView head = new android.widget.TextView(this);
         head.setText(personal ? "个人词库" : "快捷输入");
         head.setTextSize(16);
-        head.setTextColor(getColor(R.color.text_primary));
-        head.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0,
-                android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        headRow.addView(head);
+        head.setTextColor(accent);
+        android.widget.LinearLayout.LayoutParams headLp = new android.widget.LinearLayout.LayoutParams(
+                0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        headLp.setMargins(dp(8), 0, 0, 0);
+        headRow.addView(head, headLp);
 
         android.widget.TextView close = new android.widget.TextView(this);
         close.setText("关闭");
@@ -1390,19 +1419,27 @@ public class SettingsActivity extends AppCompatActivity {
         close.setTextColor(getColor(R.color.text_secondary));
         close.setPadding(dp(10), dp(4), 0, dp(4));
         headRow.addView(close);
-        box.addView(headRow);
+        headBox.addView(headRow);
 
         android.widget.TextView sub = new android.widget.TextView(this);
         sub.setText(personal
-                ? "发票抬头、税号、手机号这类自己的固定信息，打字时打缩写就出。"
-                : "常用回复、地址、套话这类整段文字，打字时打缩写就出。");
+                ? "发票抬头、税号、手机号这类固定信息。打缩写就出，点了整段上屏。"
+                : "常用回复、地址、套话这类整段文字。打缩写就出，点了整段上屏。");
         sub.setTextSize(11);
         sub.setTextColor(getColor(R.color.text_secondary));
-        sub.setPadding(0, dp(6), 0, dp(10));
-        box.addView(sub);
+        sub.setPadding(0, dp(8), 0, 0);
+        headBox.addView(sub);
+        box.addView(headBox);
 
+        android.view.View headLine = new android.view.View(this);
+        headLine.setBackgroundColor(getColor(R.color.divider));
+        box.addView(headLine, new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp2(0.5f)));
+
+        // ---- 列表区，往下留白，从这里开始滚 ----
         android.widget.LinearLayout listBox = new android.widget.LinearLayout(this);
         listBox.setOrientation(android.widget.LinearLayout.VERTICAL);
+        listBox.setPadding(dp(16), dp(14), dp(16), dp(10));
         android.widget.ScrollView sv = new android.widget.ScrollView(this);
         sv.addView(listBox);
         box.addView(sv, new android.widget.LinearLayout.LayoutParams(
@@ -1415,10 +1452,12 @@ public class SettingsActivity extends AppCompatActivity {
                     com.minivoice.ime.data.PhraseStore.byType(this, type);
             if (items.isEmpty()) {
                 android.widget.TextView empty = new android.widget.TextView(this);
-                empty.setText("还没有内容，点下面的按钮加一条，或者粘一段文字让 AI 整理。");
+                empty.setText(personal
+                        ? "还没有内容。点下面的「新增一条」，或者粘一段文字让 AI 整理。"
+                        : "还没有内容。点下面的「新增一条」，或者粘一段文字让 AI 整理。");
                 empty.setTextSize(12);
                 empty.setTextColor(getColor(R.color.text_hint));
-                empty.setPadding(0, dp(10), 0, dp(10));
+                empty.setPadding(0, dp(16), 0, dp(16));
                 listBox.addView(empty);
                 return;
             }
@@ -1426,15 +1465,33 @@ public class SettingsActivity extends AppCompatActivity {
                 android.widget.LinearLayout row = new android.widget.LinearLayout(this);
                 row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
                 row.setGravity(android.view.Gravity.CENTER_VERTICAL);
-                row.setPadding(0, dp(8), 0, dp(8));
+                row.setPadding(0, dp(10), 0, dp(10));
 
                 android.widget.LinearLayout col = new android.widget.LinearLayout(this);
                 col.setOrientation(android.widget.LinearLayout.VERTICAL);
+
+                android.widget.LinearLayout line1 = new android.widget.LinearLayout(this);
+                line1.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+                line1.setGravity(android.view.Gravity.CENTER_VERTICAL);
+
+                android.widget.TextView code = new android.widget.TextView(this);
+                code.setText(p.code.isEmpty() ? "—" : p.code);
+                code.setTextSize(11);
+                code.setIncludeFontPadding(false);
+                code.setTextColor(getColor(R.color.on_accent));
+                code.setBackgroundResource(R.drawable.bg_chip_active);
+                code.setPadding(dp(7), dp(2), dp(7), dp(2));
+                line1.addView(code);
+
                 android.widget.TextView name = new android.widget.TextView(this);
-                name.setText((p.code.isEmpty() ? "（没缩写）" : p.code) + "  " + p.label);
+                name.setText(p.label);
                 name.setTextSize(13);
                 name.setTextColor(getColor(R.color.text_primary));
-                col.addView(name);
+                android.widget.LinearLayout.LayoutParams nl = new android.widget.LinearLayout.LayoutParams(
+                        0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+                nl.setMargins(dp(8), 0, 0, 0);
+                line1.addView(name, nl);
+                col.addView(line1);
 
                 android.widget.TextView preview = new android.widget.TextView(this);
                 String one = p.text.replace("\n", " / ");
@@ -1443,15 +1500,19 @@ public class SettingsActivity extends AppCompatActivity {
                 preview.setTextSize(11);
                 preview.setTextColor(getColor(R.color.text_secondary));
                 preview.setSingleLine(true);
+                preview.setPadding(0, dp(4), 0, 0);
                 col.addView(preview);
+
                 row.addView(col, new android.widget.LinearLayout.LayoutParams(
                         0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
                 android.widget.TextView del = new android.widget.TextView(this);
                 del.setText("删除");
                 del.setTextSize(11);
+                del.setIncludeFontPadding(false);
                 del.setTextColor(getColor(R.color.text_secondary));
-                del.setPadding(dp(10), dp(6), dp(4), dp(6));
+                del.setBackgroundResource(R.drawable.bg_chip_idle);
+                del.setPadding(dp(10), dp(4), dp(10), dp(4));
                 del.setOnClickListener(v -> {
                     com.minivoice.ime.data.PhraseStore.remove(this, p);
                     refresh[0].run();
@@ -1469,30 +1530,31 @@ public class SettingsActivity extends AppCompatActivity {
         };
         refresh[0].run();
 
+        // ---- 底部按钮区，固定 ----
+        android.widget.LinearLayout btnBox = new android.widget.LinearLayout(this);
+        btnBox.setOrientation(android.widget.LinearLayout.VERTICAL);
+        btnBox.setPadding(dp(16), dp(10), dp(16), dp(14));
+        btnBox.setBackgroundColor(getColor(R.color.card_bg));
+
+        android.view.View btnLine = new android.view.View(this);
+        btnLine.setBackgroundColor(getColor(R.color.divider));
+        btnBox.addView(btnLine, new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp2(0.5f)));
+
         android.widget.LinearLayout btnRow = new android.widget.LinearLayout(this);
         btnRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
-        android.widget.Button add = new android.widget.Button(this);
-        add.setText("新增一条");
-        add.setTextSize(12);
-        add.setAllCaps(false);
-        add.setBackgroundResource(R.drawable.bg_btn_secondary);
-        add.setTextColor(getColor(R.color.text_primary));
-        btnRow.addView(add, new android.widget.LinearLayout.LayoutParams(
-                0, dp(40), 1f));
+        btnRow.setPadding(0, dp(10), 0, 0);
 
-        android.widget.Button ai = new android.widget.Button(this);
-        ai.setText("AI 整理导入");
-        ai.setTextSize(12);
-        ai.setAllCaps(false);
-        ai.setTextColor(getColor(R.color.text_primary));
-        ai.setBackgroundResource(R.drawable.bg_btn_secondary);
+        TextView add = mkChip("新增一条", false);
+        btnRow.addView(add, new android.widget.LinearLayout.LayoutParams(0, dp(40), 1f));
+
+        TextView ai = mkChip("AI 整理导入", true);
         android.widget.LinearLayout.LayoutParams aiLp = new android.widget.LinearLayout.LayoutParams(
                 0, dp(40), 1f);
         aiLp.setMargins(dp(8), 0, 0, 0);
         btnRow.addView(ai, aiLp);
-        box.addView(btnRow, new android.widget.LinearLayout.LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                android.view.ViewGroup.LayoutParams.WRAP_CONTENT));
+        btnBox.addView(btnRow);
+        box.addView(btnBox);
 
         add.setOnClickListener(v -> {
             com.minivoice.ime.data.PhraseStore.Phrase np =
@@ -1518,23 +1580,42 @@ public class SettingsActivity extends AppCompatActivity {
     /** 加一条或改一条：缩写、名称、正文。 */
     private void showPhraseEdit(com.minivoice.ime.data.PhraseStore.Phrase p,
                                 String type, Runnable refresh) {
+        final boolean personal = com.minivoice.ime.data.PhraseStore.TYPE_PERSONAL.equals(type);
         final android.app.Dialog d = new android.app.Dialog(this);
         android.widget.LinearLayout box = new android.widget.LinearLayout(this);
         box.setOrientation(android.widget.LinearLayout.VERTICAL);
-        int pad = dp(16);
-        box.setPadding(pad, pad, pad, pad);
+        box.setPadding(dp(16), dp(14), dp(16), dp(14));
 
+        android.widget.LinearLayout headRow = new android.widget.LinearLayout(this);
+        headRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        headRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
         android.widget.TextView head = new android.widget.TextView(this);
-        head.setText("编辑词条");
+        head.setText(personal ? "个人词库 · 编辑" : "快捷输入 · 编辑");
         head.setTextSize(16);
-        head.setTextColor(getColor(R.color.text_primary));
-        box.addView(head);
+        head.setTextColor(getColor(personal ? R.color.accent : R.color.text_primary));
+        head.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        headRow.addView(head);
+        android.widget.TextView close = new android.widget.TextView(this);
+        close.setText("关闭");
+        close.setTextSize(12);
+        close.setTextColor(getColor(R.color.text_secondary));
+        close.setPadding(dp(10), dp(4), 0, dp(4));
+        headRow.addView(close);
+        box.addView(headRow);
+
+        android.view.View line = new android.view.View(this);
+        line.setBackgroundColor(getColor(R.color.divider));
+        android.widget.LinearLayout.LayoutParams lineLp = new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp2(0.5f));
+        lineLp.setMargins(0, dp(10), 0, dp(10));
+        box.addView(line, lineLp);
 
         android.widget.TextView tip = new android.widget.TextView(this);
         tip.setText("缩写打几个字母就出这条，别跟别的撞了。");
         tip.setTextSize(11);
         tip.setTextColor(getColor(R.color.text_secondary));
-        tip.setPadding(0, dp(4), 0, dp(8));
+        tip.setPadding(0, 0, 0, dp(8));
         box.addView(tip);
 
         android.widget.EditText etCode = new android.widget.EditText(this);
@@ -1551,7 +1632,7 @@ public class SettingsActivity extends AppCompatActivity {
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp(40)));
 
         android.widget.EditText etLabel = new android.widget.EditText(this);
-        etLabel.setHint("名称，比如 公司开票信息");
+        etLabel.setHint(personal ? "名称，比如 公司开票信息" : "名称，比如 常用回复");
         etLabel.setText(p.label);
         etLabel.setTextSize(12);
         etLabel.setSingleLine(true);
@@ -1565,7 +1646,7 @@ public class SettingsActivity extends AppCompatActivity {
         box.addView(etLabel, labelLp);
 
         android.widget.EditText etText = new android.widget.EditText(this);
-        etText.setHint("正文，上屏的内容");
+        etText.setHint(personal ? "正文，比如公司名、税号、手机号" : "正文，点一下要上屏的整段话");
         etText.setText(p.text);
         etText.setTextSize(12);
         etText.setGravity(android.view.Gravity.TOP | android.view.Gravity.START);
@@ -1578,19 +1659,11 @@ public class SettingsActivity extends AppCompatActivity {
         textLp.setMargins(0, dp(8), 0, 0);
         box.addView(etText, textLp);
 
-        android.widget.LinearLayout btnRow = new android.widget.LinearLayout(this);
-        btnRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
-        android.widget.Button save = new android.widget.Button(this);
-        save.setText("保存");
-        save.setTextSize(12);
-        save.setAllCaps(false);
-        save.setTextColor(getColor(R.color.on_accent));
-        save.setBackgroundResource(R.drawable.bg_btn_primary);
-        btnRow.addView(save, new android.widget.LinearLayout.LayoutParams(
-                0, dp(40), 1f));
-        box.addView(btnRow, new android.widget.LinearLayout.LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                android.view.ViewGroup.LayoutParams.WRAP_CONTENT));
+        TextView save = mkChip("保存", true);
+        android.widget.LinearLayout.LayoutParams saveLp = new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp(42));
+        saveLp.setMargins(0, dp(12), 0, 0);
+        box.addView(save, saveLp);
 
         save.setOnClickListener(v -> {
             String code = etCode.getText().toString().trim().toLowerCase()
@@ -1613,6 +1686,7 @@ public class SettingsActivity extends AppCompatActivity {
             d.dismiss();
             if (refresh != null) refresh.run();
         });
+        close.setOnClickListener(v -> d.dismiss());
 
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
         bg.setColor(getColor(R.color.card_bg));
@@ -1622,30 +1696,49 @@ public class SettingsActivity extends AppCompatActivity {
         d.setCanceledOnTouchOutside(true);
         android.view.Window w = d.getWindow();
         w.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.92),
-                (int) (getResources().getDisplayMetrics().heightPixels * 0.6));
+                (int) (getResources().getDisplayMetrics().heightPixels * 0.62));
         w.setGravity(android.view.Gravity.CENTER);
         d.show();
     }
 
     /** 粘一段杂七杂八的内容，交给模型拆成一条条词库。 */
     private void showPhraseImport(String type, Runnable refresh) {
+        final boolean personal = com.minivoice.ime.data.PhraseStore.TYPE_PERSONAL.equals(type);
         final android.app.Dialog d = new android.app.Dialog(this);
         android.widget.LinearLayout box = new android.widget.LinearLayout(this);
         box.setOrientation(android.widget.LinearLayout.VERTICAL);
-        int pad = dp(16);
-        box.setPadding(pad, pad, pad, pad);
+        box.setPadding(dp(16), dp(14), dp(16), dp(14));
 
+        android.widget.LinearLayout headRow = new android.widget.LinearLayout(this);
+        headRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        headRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
         android.widget.TextView head = new android.widget.TextView(this);
-        head.setText("AI 整理导入");
+        head.setText(personal ? "个人词库 · AI 整理" : "快捷输入 · AI 整理");
         head.setTextSize(16);
-        head.setTextColor(getColor(R.color.text_primary));
-        box.addView(head);
+        head.setTextColor(getColor(personal ? R.color.accent : R.color.text_primary));
+        head.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        headRow.addView(head);
+        android.widget.TextView close = new android.widget.TextView(this);
+        close.setText("关闭");
+        close.setTextSize(12);
+        close.setTextColor(getColor(R.color.text_secondary));
+        close.setPadding(dp(10), dp(4), 0, dp(4));
+        headRow.addView(close);
+        box.addView(headRow);
+
+        android.view.View line = new android.view.View(this);
+        line.setBackgroundColor(getColor(R.color.divider));
+        android.widget.LinearLayout.LayoutParams lineLp = new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp2(0.5f));
+        lineLp.setMargins(0, dp(10), 0, dp(10));
+        box.addView(line, lineLp);
 
         android.widget.TextView tip = new android.widget.TextView(this);
-        tip.setText("把一堆信息粘进来，模型会拆成缩写、名称、正文三段。手机号、税号这类数字保持原样。");
+        tip.setText("把一堆信息粘进来，模型会拆成缩写、名称、正文三段。手机号、税号这些数字原样保留。");
         tip.setTextSize(11);
         tip.setTextColor(getColor(R.color.text_secondary));
-        tip.setPadding(0, dp(4), 0, dp(8));
+        tip.setPadding(0, 0, 0, dp(8));
         box.addView(tip);
 
         android.widget.EditText et = new android.widget.EditText(this);
@@ -1659,21 +1752,16 @@ public class SettingsActivity extends AppCompatActivity {
         box.addView(et, new android.widget.LinearLayout.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        final android.widget.TextView status = new android.widget.TextView(this);
+        android.widget.TextView status = new android.widget.TextView(this);
         status.setTextSize(11);
         status.setTextColor(getColor(R.color.text_secondary));
         status.setPadding(0, dp(8), 0, 0);
         box.addView(status);
 
-        android.widget.Button go = new android.widget.Button(this);
-        go.setText("开始整理");
-        go.setTextSize(12);
-        go.setAllCaps(false);
-        go.setTextColor(getColor(R.color.on_accent));
-        go.setBackgroundResource(R.drawable.bg_btn_primary);
+        TextView go = mkChip("开始整理", true);
         android.widget.LinearLayout.LayoutParams goLp = new android.widget.LinearLayout.LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp(40));
-        goLp.setMargins(0, dp(8), 0, 0);
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp(42));
+        goLp.setMargins(0, dp(10), 0, 0);
         box.addView(go, goLp);
 
         go.setOnClickListener(v -> {
@@ -1696,6 +1784,7 @@ public class SettingsActivity extends AppCompatActivity {
                 }
             });
         });
+        close.setOnClickListener(v -> d.dismiss());
 
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
         bg.setColor(getColor(R.color.card_bg));
