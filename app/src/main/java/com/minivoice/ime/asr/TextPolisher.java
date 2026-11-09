@@ -30,15 +30,15 @@ public final class TextPolisher {
         void onResult(String text);
     }
 
-    private static final String SYSTEM =
-            "你是语音输入法的整理助手。用户说完话，你负责把转写出来的文字整理成他真正想发出去的样子。规则："
-                    + "1. 只改表达，不改意思。用户没说的内容一个字都不要加，用户说过的信息不要删。"
-                    + "2. 去掉嗯、啊、呃、那个、就是说、然后、嗯哼这类口头语，以及重复啰嗦的词。"
-                    + "3. 同音错字按上下文改成正确的字，人名、产品名、型号、数字、英文按原样保留，不要自行改写或翻译。"
-                    + "4. 补上合适的标点，长句按意思断成短句，一句话说不完可以两三句。"
-                    + "5. 保留用户原本的语气，别改成公文体，也别加书面化的连接词。"
-                    + "6. 只有用户明确在说几件事、明显是并列的时候才分条，最多用 1、2、3 分行，其他情况就写成一整段，不要主动分条。"
-                    + "7. 不要加任何前缀、标题、解释、总结，也不要用引号把整段话包起来，直接输出整理后的正文。";
+    /** 默认提示词，短一点，给模型留余地，别把它框死。 */
+    private static final String DEFAULT_SYSTEM =
+            "你是语音输入法的润色助手。用户给的是语音识别原文，口语、有错字，请改成像他自己打字发出来的话。"
+                    + "\n"
+                    + "1. 去掉嗯、啊、呃、那个、就是说这类口水词和重复啰嗦的地方。"
+                    + "2. 按上下文修同音错字，补标点、断句，句子顺一点。"
+                    + "3. 内容不增不减：说到的信息、语气、细节都要留下，不许扩写、总结、分条、加标题。"
+                    + "4. 人名、产品名、型号、数字、英文照原样，别翻译别改写。"
+                    + "5. 直接输出整理后的正文，不要任何前缀、引号或解释。";
 
     private static final OkHttpClient CLIENT = new OkHttpClient.Builder()
             .connectTimeout(8, TimeUnit.SECONDS)
@@ -49,9 +49,14 @@ public final class TextPolisher {
 
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
-    /** 给设置页看整理规则用。 */
-    public static String rulesText() {
-        return SYSTEM;
+    /** 设置页里看到的提示词：用户改过就用改过的。 */
+    public static String rulesText(Context ctx) {
+        String custom = Prefs.getString(ctx, Prefs.K_PROMPT_CLOUD, "");
+        return custom == null || custom.trim().isEmpty() ? DEFAULT_SYSTEM : custom;
+    }
+
+    public static String defaultRules() {
+        return DEFAULT_SYSTEM;
     }
 
     private TextPolisher() {
@@ -147,10 +152,10 @@ public final class TextPolisher {
             JsonObject sys = new JsonObject();
             sys.addProperty("role", "system");
             List<String> vocab = Prefs.getWordList(ctx);
-            String sysText = SYSTEM;
+            String sysText = rulesText(ctx);
             if (!vocab.isEmpty()) {
                 StringBuilder sb = new StringBuilder(sysText);
-                sb.append("\n8. 下面这些是用户指定必须原样保留的名词，出现时按这个写法输出，读错同音字也要按这个改：");
+                sb.append("\n这些专有名词用户要求原样保留，读错了也按这个写法输出：");
                 for (int i = 0; i < vocab.size(); i++) {
                     if (i > 0) sb.append("、");
                     sb.append(vocab.get(i));

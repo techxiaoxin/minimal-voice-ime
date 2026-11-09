@@ -536,55 +536,78 @@ public class SettingsActivity extends AppCompatActivity {
         return (int) (getResources().getDisplayMetrics().density * v);
     }
 
-    /** 把当前整理引擎真正在用的那套规则摊开给用户看。 */
+    /** 整理提示词做成可编辑的，改完点保存立刻生效，也能一键恢复默认。 */
     private void showPolishRules() {
-        boolean local = "local".equals(Prefs.getString(this, Prefs.K_POLISH_ENGINE, "cloud"));
-        String tip = local ? "本地整理用的规则" : "云端整理用的规则";
+        final boolean local = "local".equals(Prefs.getString(this, Prefs.K_POLISH_ENGINE, "cloud"));
+        final String key = local ? Prefs.K_PROMPT_LOCAL : Prefs.K_PROMPT_CLOUD;
         String body = local
-                ? com.minivoice.ime.asr.LlmPolisher.rulesText()
-                : com.minivoice.ime.asr.TextPolisher.rulesText();
+                ? com.minivoice.ime.asr.LlmPolisher.rulesText(this)
+                : com.minivoice.ime.asr.TextPolisher.rulesText(this);
 
         final android.app.Dialog d = new android.app.Dialog(this);
         android.widget.LinearLayout box = new android.widget.LinearLayout(this);
         box.setOrientation(android.widget.LinearLayout.VERTICAL);
         int pad = dp(18);
         box.setPadding(pad, pad, pad, pad);
+        box.setBackgroundColor(getColor(R.color.card_bg));
 
         android.widget.LinearLayout headRow = new android.widget.LinearLayout(this);
         headRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
         headRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
         android.widget.TextView head = new android.widget.TextView(this);
-        head.setText("整理规则");
+        head.setText(local ? "整理提示词 · 本地" : "整理提示词 · 云端");
         head.setTextSize(16);
         head.setTextColor(getColor(R.color.text_primary));
         head.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0,
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         headRow.addView(head);
-        android.widget.TextView close = new android.widget.TextView(this);
-        close.setText("关闭");
-        close.setTextSize(12);
-        close.setTextColor(getColor(R.color.text_secondary));
-        close.setPadding(dp(8), 0, 0, 0);
-        close.setOnClickListener(v -> d.dismiss());
-        headRow.addView(close);
+
+        android.widget.TextView reset = new android.widget.TextView(this);
+        reset.setText("恢复默认");
+        reset.setTextSize(12);
+        reset.setTextColor(getColor(R.color.text_secondary));
+        reset.setPadding(dp(10), dp(4), dp(10), dp(4));
+        headRow.addView(reset);
+
+        android.widget.TextView save = new android.widget.TextView(this);
+        save.setText("保存");
+        save.setTextSize(12);
+        save.setTextColor(getColor(R.color.text_primary));
+        save.setPadding(dp(10), dp(4), 0, dp(4));
+        headRow.addView(save);
         box.addView(headRow);
 
         android.widget.TextView sub = new android.widget.TextView(this);
-        sub.setText(tip);
+        sub.setText("这段就是发给模型的指令，改完保存，后面整理都按新的来。");
         sub.setTextSize(11);
         sub.setTextColor(getColor(R.color.text_secondary));
         sub.setPadding(0, dp(6), 0, dp(8));
         box.addView(sub);
 
+        android.widget.EditText et = new android.widget.EditText(this);
+        et.setText(body);
+        et.setTextSize(12);
+        et.setTextColor(getColor(R.color.text_primary));
+        et.setGravity(android.view.Gravity.TOP | android.view.Gravity.START);
+        et.setBackgroundResource(R.drawable.bg_card);
+        et.setPadding(dp(10), dp(10), dp(10), dp(10));
+        et.setLineSpacing(dp(4), 1f);
         android.widget.ScrollView sv = new android.widget.ScrollView(this);
-        android.widget.TextView tv = new android.widget.TextView(this);
-        tv.setText(body);
-        tv.setTextSize(12);
-        tv.setTextColor(getColor(R.color.text_primary));
-        tv.setLineSpacing(dp(4), 1f);
-        sv.addView(tv);
+        sv.addView(et);
         box.addView(sv, new android.widget.LinearLayout.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        reset.setOnClickListener(v -> {
+            et.setText(local
+                    ? com.minivoice.ime.asr.LlmPolisher.defaultRules()
+                    : com.minivoice.ime.asr.TextPolisher.defaultRules());
+        });
+        save.setOnClickListener(v -> {
+            String txt = et.getText().toString().trim();
+            Prefs.putString(SettingsActivity.this, key, txt);
+            android.widget.Toast.makeText(SettingsActivity.this, "已保存", android.widget.Toast.LENGTH_SHORT).show();
+            d.dismiss();
+        });
 
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
         bg.setColor(getColor(R.color.card_bg));
@@ -594,7 +617,7 @@ public class SettingsActivity extends AppCompatActivity {
         d.setCanceledOnTouchOutside(true);
         android.view.Window w = d.getWindow();
         w.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.9),
-                (int) (getResources().getDisplayMetrics().heightPixels * 0.68));
+                (int) (getResources().getDisplayMetrics().heightPixels * 0.72));
         w.setGravity(android.view.Gravity.CENTER);
         d.show();
     }

@@ -728,6 +728,8 @@ public class MinimalVoiceIME extends InputMethodService {
 
         rebuildFullRows();
         refreshCand();
+        // 拼音表包在 assets 里，四百多 K，放到后台线程先解开，免得第一次按字母卡一下
+        new Thread(() -> com.minivoice.ime.input.PinyinDict.get(getApplicationContext())).start();
 
         int idx = parent.indexOfChild(flKeysRow);
         parent.addView(llFull, idx, new LinearLayout.LayoutParams(
@@ -741,14 +743,12 @@ public class MinimalVoiceIME extends InputMethodService {
             addKeyRow(new String[]{"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"}, 1f);
             addKeyRow(new String[]{"，", "。", "？", "！", "、", "：", "；", "（", "）", "~"}, 1f);
             buildBottomRow("符号");
-        } else if (pinyinMode || shiftOn) {
-            addKeyRow(new String[]{"q", "w", "e", "r", "t", "y", "u", "i", "o", "p"}, 1f);
-            addKeyRow(new String[]{"a", "s", "d", "f", "g", "h", "j", "k", "l"}, 1f);
-            buildShiftRow();
-            buildBottomRow("字母");
         } else {
-            addKeyRow(new String[]{"q", "w", "e", "r", "t", "y", "u", "i", "o", "p"}, 1f);
-            addKeyRow(new String[]{"a", "s", "d", "f", "g", "h", "j", "k", "l"}, 1f);
+            addDigitRow();
+            addPuncRow(new String[]{"q", "w", "e", "r", "t", "y", "u", "i", "o", "p"},
+                    new String[]{"、", "。", "？", "！", "，", "：", "；", "“", "”", "（"});
+            addPuncRow(new String[]{"a", "s", "d", "f", "g", "h", "j", "k", "l"},
+                    new String[]{"）", "@", "#", "%", "&", "*", "-", "=", "+"});
             buildShiftRow();
             buildBottomRow("字母");
         }
@@ -768,6 +768,83 @@ public class MinimalVoiceIME extends InputMethodService {
 
     private Runnable onLetterRunnable(final String key) {
         return () -> onFullLetter(key);
+    }
+
+    /** 字母层最上面一排数字，当普通按键用。 */
+    private void addDigitRow() {
+        LinearLayout row = new LinearLayout(uiCtx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(40)));
+        for (int i = 1; i <= 9; i++) {
+            row.addView(mkKey(String.valueOf(i), 1f, onLetterRunnable(String.valueOf(i))));
+        }
+        row.addView(mkKey("0", 1f, onLetterRunnable("0")));
+        llFullRows.addView(row);
+    }
+
+    /** 字母键上滑打标点，单击还是打字母，跟常见输入法的习惯一致。 */
+    private void addPuncRow(String[] letters, String[] puncts) {
+        LinearLayout row = new LinearLayout(uiCtx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(46)));
+        for (int i = 0; i < letters.length; i++) {
+            final String letter = letters[i];
+            String label = shiftOn && !pinyinMode ? letter.toUpperCase() : letter;
+            TextView tv = mkKey(label, 1f, () -> {
+            });
+            final String punct = puncts[i];
+            tv.setOnTouchListener(new View.OnTouchListener() {
+                float downY;
+
+                @Override
+                public boolean onTouch(View v, MotionEvent e) {
+                    switch (e.getActionMasked()) {
+                        case MotionEvent.ACTION_DOWN:
+                            downY = e.getY();
+                            v.setPressed(true);
+                            return true;
+                        case MotionEvent.ACTION_MOVE:
+                            v.setPressed(true);
+                            return true;
+                        case MotionEvent.ACTION_UP:
+                            v.setPressed(false);
+                            if (downY - e.getY() > dp(24)) {
+                                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                                commitPunct(punct);
+                            } else {
+                                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                                onFullLetter(letter);
+                            }
+                            vibrate(8);
+                            return true;
+                        case MotionEvent.ACTION_CANCEL:
+                            v.setPressed(false);
+                            return true;
+                        default:
+                            return false;
+                    }
+                }
+            });
+            row.addView(tv);
+        }
+        llFullRows.addView(row);
+    }
+
+    private void commitPunct(String p) {
+        InputConnection ic = getCurrentInputConnection();
+        if (ic == null) return;
+        if (composing.length() > 0 && !candList.isEmpty()) {
+            ic.commitText(candList.get(0), 1);
+            composing.setLength(0);
+        } else if (composing.length() > 0) {
+            ic.commitText(ic.getTextBeforeCursor(composing.length(), 0), 1);
+            composing.setLength(0);
+        }
+        ic.commitText(p, 1);
+        candList.clear();
+        refreshCand();
     }
 
     private void buildShiftRow() {
@@ -812,15 +889,15 @@ public class MinimalVoiceIME extends InputMethodService {
                 rebuildFullRows();
             }));
         }
-        row.addView(mkKey("空格", 2.6f, this::fullSpace));
-        if (symbolLayer) {
-            row.addView(mkKey("⌫", 1.2f, this::fullDelete));
-        }
-        row.addView(mkKey("语音", 1.2f, () -> {
+        row.addView(mkKey("语音", 1.1f, () -> {
             clearComposing();
             applyModeState(false);
         }));
-        row.addView(mkKey("发送", 1.3f, this::fullEnter));
+        row.addView(mkKey("空格", 2.4f, this::fullSpace));
+        if (symbolLayer) {
+            row.addView(mkKey("⌫", 1.2f, this::fullDelete));
+        }
+        row.addView(mkKey("发送", 1.4f, this::fullEnter));
         llFullRows.addView(row);
     }
 
@@ -848,7 +925,9 @@ public class MinimalVoiceIME extends InputMethodService {
     private void onFullLetter(String key) {
         InputConnection ic = getCurrentInputConnection();
         if (ic == null) return;
-        if (!pinyinMode || symbolLayer) {
+        // 数字、标点这类键不进拼音串，直接上屏
+        char c0 = key.charAt(0);
+        if (!pinyinMode || symbolLayer || c0 < 'a' || c0 > 'z') {
             ic.commitText(shiftOn ? key.toUpperCase() : key, 1);
             return;
         }

@@ -74,7 +74,7 @@
                     <Button android:id="@+id/btn_llm_download" android:layout_width="match_parent" android:layout_height="42dp" android:layout_marginTop="6dp" android:text="@string/llm_download" android:textSize="13sp" />
                     <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginTop="12dp" android:layout_marginBottom="10dp" android:background="@color/divider" />
                     <TextView android:id="@+id/tv_test" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:lineSpacingExtra="3dp" android:textSize="11sp" android:visibility="gone" />
-                    <TextView android:id="@+id/tv_polish_rules" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="查看整理规则" android:textColor="@color/text_secondary" android:textSize="11sp" android:paddingTop="4dp" android:paddingBottom="4dp" />
+                    <TextView android:id="@+id/tv_polish_rules" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="查看和修改整理规则" android:textColor="@color/text_secondary" android:textSize="11sp" android:paddingTop="4dp" android:paddingBottom="4dp" />
                 </LinearLayout>
             </LinearLayout>
             <LinearLayout android:id="@+id/group_more" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">

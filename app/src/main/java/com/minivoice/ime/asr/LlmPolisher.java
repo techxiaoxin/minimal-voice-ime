@@ -2,33 +2,29 @@ package com.minivoice.ime.asr;
 
 import android.content.Context;
 
+import com.minivoice.ime.settings.Prefs;
+
 import java.io.File;
 
 /** 用手机里的 Qwen2.5-0.5B 整理口语，纯离线，慢一点但是不联网。 */
 public final class LlmPolisher {
 
-    private static final String SYSTEM =
-            "你是输入法的文字整理助手。用户给的是语音识别原文，口语化，可能有识别错误。你的任务是把它改写成通顺的书面句子。"
-                    + "\n\n示例："
-                    + "\n原文：嗯那个我今天下午大概三点左右吧去那个福田的 apple 店看一下 iphone 的新机子啊顺便问问 wifi 那个问题"
-                    + "\n整理：我今天下午三点左右去福田的 Apple 店看 iPhone 新机，顺便问一下 WiFi 的问题。"
-                    + "\n\n要求："
-                    + "\n1. 只输出整理后的句子，一行，不要前缀，不要引号，不要解释。"
-                    + "\n2. 删掉「嗯」「啊」「那个」「就是说」「大概」「吧」这类口语填充词，重复的词合并。"
-                    + "\n3. 把口语改成书面表达，语序理顺，该断句就断句，绝对不要照抄原文。"
-                    + "\n4. 中英混杂的名词按常见写法输出，比如 iPhone、WiFi、Type-C、Pro，不要翻译成中文，也不要改成别的词。"
-                    + "\n5. 明显的同音错字按上下文改对，人名、地名、专业词不乱改。"
-                    + "\n6. 意思和语气不能变，不要扩写，不要加评论和总结。"
-                    + "\n7. 原文里说到的每件事、每个信息点都要留下，不能因为嫌啰嗦就把内容砍掉。"
-                    + "\n8. 整理后的长度应该跟原文差不多，最多只能短一成左右，明显变短就说明你删多了，这是不允许的。"
-                    + "\n9. 宁可保留一点口语痕迹，也不许把意思压没。";
+    private static final String DEFAULT_SYSTEM =
+            "把下面这句话改顺，像用户自己打出来的。去掉口水词和重复，修同音错字，补标点。"
+                    + "\n意思、信息点、语气都不能丢，不许扩写、总结、分条、加前缀，长度和原文差不多。"
+                    + "\n英文和型号照原样写，比如 iPhone、WiFi、Type-C。只输出这一句。";
 
     private static volatile boolean tried = false;
     private static volatile String loadedPath = null;
 
-    /** 给设置页看整理规则用。 */
-    public static String rulesText() {
-        return SYSTEM;
+    /** 设置页里看到的提示词：用户改过就用改过的。 */
+    public static String rulesText(Context ctx) {
+        String custom = Prefs.getString(ctx, Prefs.K_PROMPT_LOCAL, "");
+        return custom == null || custom.trim().isEmpty() ? DEFAULT_SYSTEM : custom;
+    }
+
+    public static String defaultRules() {
+        return DEFAULT_SYSTEM;
     }
 
     private LlmPolisher() {
@@ -58,7 +54,7 @@ public final class LlmPolisher {
         if (raw == null || raw.trim().isEmpty()) return raw;
         if (!ensureLoaded(ctx)) return "";
         int maxTokens = Math.max(48, Math.min(256, raw.length() * 3 + 24));
-        String out = LocalLlm.generate(SYSTEM, raw, maxTokens);
+        String out = LocalLlm.generate(rulesText(ctx), raw, maxTokens);
         out = clean(out, raw);
         return out;
     }
