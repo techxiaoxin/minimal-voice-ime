@@ -1483,23 +1483,25 @@ public class SettingsActivity extends AppCompatActivity {
                 code.setPadding(dp(7), dp(2), dp(7), dp(2));
                 line1.addView(code);
 
-                android.widget.TextView name = new android.widget.TextView(this);
-                name.setText(p.label);
-                name.setTextSize(13);
-                name.setTextColor(getColor(R.color.text_primary));
-                android.widget.LinearLayout.LayoutParams nl = new android.widget.LinearLayout.LayoutParams(
-                        0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-                nl.setMargins(dp(8), 0, 0, 0);
-                line1.addView(name, nl);
+                if (!p.label.isEmpty() && !p.label.equalsIgnoreCase(p.code)) {
+                    android.widget.TextView name = new android.widget.TextView(this);
+                    name.setText(p.label);
+                    name.setTextSize(13);
+                    name.setTextColor(getColor(R.color.text_primary));
+                    android.widget.LinearLayout.LayoutParams nl = new android.widget.LinearLayout.LayoutParams(
+                            0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+                    nl.setMargins(dp(8), 0, 0, 0);
+                    line1.addView(name, nl);
+                }
                 col.addView(line1);
 
                 android.widget.TextView preview = new android.widget.TextView(this);
-                String one = p.text.replace("\n", " / ");
-                if (one.length() > 24) one = one.substring(0, 24) + "…";
+                String one = p.text.replace("\n", " · ");
+                if (one.length() > 40) one = one.substring(0, 40) + "…";
                 preview.setText(one);
                 preview.setTextSize(11);
                 preview.setTextColor(getColor(R.color.text_secondary));
-                preview.setSingleLine(true);
+                preview.setMaxLines(2);
                 preview.setPadding(0, dp(4), 0, 0);
                 col.addView(preview);
 
@@ -1612,14 +1614,14 @@ public class SettingsActivity extends AppCompatActivity {
         box.addView(line, lineLp);
 
         android.widget.TextView tip = new android.widget.TextView(this);
-        tip.setText("缩写打几个字母就出这条，别跟别的撞了。");
+        tip.setText("缩写打完这几个字母就出这一整段，别跟别的撞了。");
         tip.setTextSize(11);
         tip.setTextColor(getColor(R.color.text_secondary));
         tip.setPadding(0, 0, 0, dp(8));
         box.addView(tip);
 
         android.widget.EditText etCode = new android.widget.EditText(this);
-        etCode.setHint("缩写，比如 fp");
+        etCode.setHint("缩写，比如 fp 或 sg");
         etCode.setText(p.code);
         etCode.setTextSize(12);
         etCode.setSingleLine(true);
@@ -1630,20 +1632,6 @@ public class SettingsActivity extends AppCompatActivity {
         etCode.setHintTextColor(getColor(R.color.text_hint));
         box.addView(etCode, new android.widget.LinearLayout.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp(40)));
-
-        android.widget.EditText etLabel = new android.widget.EditText(this);
-        etLabel.setHint(personal ? "名称，比如 公司开票信息" : "名称，比如 常用回复");
-        etLabel.setText(p.label);
-        etLabel.setTextSize(12);
-        etLabel.setSingleLine(true);
-        etLabel.setBackgroundResource(R.drawable.bg_input);
-        etLabel.setPadding(dp(10), 0, dp(10), 0);
-        etLabel.setTextColor(getColor(R.color.text_primary));
-        etLabel.setHintTextColor(getColor(R.color.text_hint));
-        android.widget.LinearLayout.LayoutParams labelLp = new android.widget.LinearLayout.LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp(40));
-        labelLp.setMargins(0, dp(8), 0, 0);
-        box.addView(etLabel, labelLp);
 
         android.widget.EditText etText = new android.widget.EditText(this);
         etText.setHint(personal ? "正文，比如公司名、税号、手机号" : "正文，点一下要上屏的整段话");
@@ -1668,14 +1656,13 @@ public class SettingsActivity extends AppCompatActivity {
         save.setOnClickListener(v -> {
             String code = etCode.getText().toString().trim().toLowerCase()
                     .replaceAll("[^a-z0-9]", "");
-            String label = etLabel.getText().toString().trim();
             String text = etText.getText().toString().trim();
             if (code.isEmpty() || text.isEmpty()) {
                 android.widget.Toast.makeText(this, "缩写和正文都要填",
                         android.widget.Toast.LENGTH_SHORT).show();
                 return;
             }
-            if (label.isEmpty()) label = code;
+            String label = code;
             com.minivoice.ime.data.PhraseStore.Phrase np =
                     new com.minivoice.ime.data.PhraseStore.Phrase(code, label, text, type);
             if (!p.code.isEmpty() || !p.text.isEmpty()) {

@@ -138,7 +138,8 @@ public final class PhraseStore {
         for (Phrase p : pool) {
             if (p.code == null || p.code.isEmpty()) continue;
             String c = p.code.toLowerCase(Locale.ROOT);
-            if (c.startsWith(q)) {
+            // 必须把缩写完整打完才出，只打一半不出
+            if (c.equals(q)) {
                 out.add(p);
                 if (out.size() >= max) break;
             }
