@@ -10,8 +10,8 @@ android {
         applicationId "com.minivoice.ime"
         minSdk 26
         targetSdk 34
-        versionCode 72
-        versionName "0.3.1"
+        versionCode 73
+        versionName "0.3.2"
         ndk {
             abiFilters "arm64-v8a"
         }
