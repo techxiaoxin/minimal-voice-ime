@@ -36,6 +36,8 @@ public final class Prefs {
     /** AI 整理用哪个引擎：cloud 走百炼，local 走手机里的小模型。 */
     public static final String K_POLISH_ENGINE = "polish_engine";
     public static final String K_PROMPT_CLOUD = "polish_prompt_cloud";
+    /** 云端 AI 整理用的文本模型，用户可以在设置页自己换。 */
+    public static final String K_POLISH_MODEL = "polish_model";
     public static final String K_PROMPT_LOCAL = "polish_prompt_local";
     /** 本地整理模型的下载地址，留空用预设。 */
     public static final String K_LLM_URL = "llm_url";

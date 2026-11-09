@@ -106,6 +106,21 @@ public class AsrConfig {
         return false;
     }
 
+    /**
+     * 同一个域名下，识别走 multimodal 原生接口，整理走 OpenAI 兼容接口。
+     * 用户改过接口地址时，把路径换一下就能复用同一个业务空间域名。
+     */
+    public static String polishEndpoint(String asrEndpoint) {
+        String ep = asrEndpoint == null ? "" : asrEndpoint.trim();
+        if (ep.isEmpty()) return BAILIAN_ENDPOINT;
+        if (ep.contains("/compatible-mode/v1/chat/completions")) return ep;
+        if (ep.contains("/api/v1/services/aigc/multimodal-generation/generation")) {
+            return ep.replace("/api/v1/services/aigc/multimodal-generation/generation",
+                    "/compatible-mode/v1/chat/completions");
+        }
+        return BAILIAN_ENDPOINT;
+    }
+
     /** 原生模型走 multimodal 接口，其余走 OpenAI 兼容接口。 */
     public static String endpointFor(String model) {
         return BAILIAN_MODEL_AUDIO.equals(model) ? BAILIAN_NATIVE_ENDPOINT : BAILIAN_ENDPOINT;

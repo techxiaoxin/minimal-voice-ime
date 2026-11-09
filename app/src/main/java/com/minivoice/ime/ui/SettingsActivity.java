@@ -52,6 +52,10 @@ public class SettingsActivity extends AppCompatActivity {
     private EditText etEndpoint;
     private EditText etApikey;
     private EditText etModel;
+    private EditText etPolishModel;
+    private Button btnPolishTest;
+    private TextView tvPolishResult;
+    private android.widget.LinearLayout groupPolishCloud;
     private EditText etDevice;
     private EditText etVocab;
     private EditText etPunct;
@@ -125,6 +129,10 @@ public class SettingsActivity extends AppCompatActivity {
         etEndpoint = findViewById(R.id.et_endpoint);
         etApikey = findViewById(R.id.et_apikey);
         etModel = findViewById(R.id.et_model);
+        etPolishModel = findViewById(R.id.et_polish_model);
+        btnPolishTest = findViewById(R.id.btn_polish_test);
+        tvPolishResult = findViewById(R.id.tv_polish_result);
+        groupPolishCloud = findViewById(R.id.group_polish_cloud);
         etDevice = findViewById(R.id.et_device);
         etVocab = findViewById(R.id.et_vocab);
         etPunct = findViewById(R.id.et_punct);
@@ -240,6 +248,7 @@ public class SettingsActivity extends AppCompatActivity {
 
         btnEye.setOnClickListener(v -> toggleKeyVisible());
         btnTest.setOnClickListener(v -> testConnection());
+        btnPolishTest.setOnClickListener(v -> testPolishModel());
         tabVoice.setOnClickListener(v -> switchTab(true));
         tabMore.setOnClickListener(v -> switchTab(false));
 
@@ -324,6 +333,7 @@ public class SettingsActivity extends AppCompatActivity {
         etEndpoint.setText(c.endpoint);
         etApikey.setText(c.apiKey);
         etModel.setText(c.model);
+        etPolishModel.setText(Prefs.getString(this, Prefs.K_POLISH_MODEL, AsrConfig.POLISH_MODEL));
 
         etDevice.setText(Prefs.getString(this, Prefs.K_DEVICE_NAME,
                 android.os.Build.MODEL));
@@ -833,6 +843,9 @@ public class SettingsActivity extends AppCompatActivity {
         if (rgPolishEngine == null) return;
         String engine = Prefs.getString(this, Prefs.K_POLISH_ENGINE, "cloud");
         boolean local = "local".equals(engine);
+        if (groupPolishCloud != null) {
+            groupPolishCloud.setVisibility(local ? android.view.View.GONE : android.view.View.VISIBLE);
+        }
         rbPolishLocal.setChecked(local);
         rbPolishCloud.setChecked(!local);
         if (local) {
@@ -1013,6 +1026,9 @@ public class SettingsActivity extends AppCompatActivity {
         c.polish = swPolish != null && swPolish.isChecked();
         c.save(this);
 
+        String pm = etPolishModel.getText().toString().trim();
+        Prefs.putString(this, Prefs.K_POLISH_MODEL,
+                pm.isEmpty() ? AsrConfig.POLISH_MODEL : pm);
         Prefs.putString(this, Prefs.K_DEVICE_NAME, etDevice.getText().toString().trim());
         Prefs.setWordList(this, splitLines(etVocab.getText().toString()));
         Prefs.putString(this, Prefs.K_PUNCT, etPunct.getText().toString().trim());
@@ -1185,6 +1201,84 @@ public class SettingsActivity extends AppCompatActivity {
                 runOnUiThread(() -> doneTest(false, "网络没通：" + e.getMessage(), COLOR_RED));
             }
         }).start();
+    }
+
+    /** 云端整理模型单独测一次：塞一句满是口水话的样例，看它到底会不会整理。 */
+    private void testPolishModel() {
+        final String url = AsrConfig.polishEndpoint(etEndpoint.getText().toString().trim());
+        final String key = AsrConfig.sanitizeKey(etApikey.getText().toString());
+        String model = etPolishModel.getText().toString().trim();
+        if (model.isEmpty()) model = AsrConfig.POLISH_MODEL;
+        final String fm = model;
+        if (key.isEmpty()) {
+            polishResult(false, "API Key 是空的，先填一下");
+            return;
+        }
+        polishResult(true, "正在测试整理模型…");
+        btnPolishTest.setEnabled(false);
+
+        new Thread(() -> {
+            long t0 = System.currentTimeMillis();
+            String sample = "呃我今天就是想跟你说一下那个明天上午十点的会可能得往后推半个小时"
+                    + "因为李总那边飞机晚点了嗯然后麻烦你通知一下大家";
+            String body = "{\"model\":\"" + fm + "\",\"messages\":["
+                    + "{\"role\":\"system\",\"content\":\"把语音转写的口语文字整理成通顺的书面句，"
+                    + "去掉口头语和重复，不删信息，直接输出正文。\"},"
+                    + "{\"role\":\"user\",\"content\":\"" + sample + "\"}],"
+                    + "\"enable_thinking\":false,\"max_tokens\":200,\"temperature\":0.2}";
+            OkHttpClient client = new OkHttpClient.Builder()
+                    .connectTimeout(15, TimeUnit.SECONDS)
+                    .readTimeout(40, TimeUnit.SECONDS)
+                    .protocols(java.util.Collections.singletonList(okhttp3.Protocol.HTTP_1_1))
+                    .proxy(Proxy.NO_PROXY)
+                    .build();
+            Request request = new Request.Builder()
+                    .url(url)
+                    .addHeader("Authorization", "Bearer " + key)
+                    .post(RequestBody.create(body,
+                            MediaType.parse("application/json; charset=utf-8")))
+                    .build();
+            try (Response r = client.newCall(request).execute()) {
+                String text = r.body() == null ? "" : r.body().string();
+                long ms = System.currentTimeMillis() - t0;
+                if (r.code() == 200) {
+                    String out = "";
+                    String usage = "";
+                    try {
+                        com.google.gson.JsonObject o =
+                                com.google.gson.JsonParser.parseString(text).getAsJsonObject();
+                        out = o.getAsJsonArray("choices").get(0).getAsJsonObject()
+                                .getAsJsonObject("message").get("content").getAsString().trim();
+                        if (o.has("usage") && o.getAsJsonObject("usage").has("total_tokens")) {
+                            usage = o.getAsJsonObject("usage").get("total_tokens").getAsString();
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    if (out.length() > 60) out = out.substring(0, 60) + "…";
+                    final String fout = out;
+                    final String fused = usage;
+                    runOnUiThread(() -> polishResult(true, "整理可用，耗时 " + ms + " 毫秒"
+                            + (fused.isEmpty() ? "" : "，这次 " + fused + " tokens")
+                            + "\n结果：" + (fout.isEmpty() ? "接口通了但没读到正文" : fout)));
+                } else if (r.code() == 401 || r.code() == 403) {
+                    runOnUiThread(() -> polishResult(false,
+                            "Key 被拒（" + r.code() + "）：" + extractMsg(text)));
+                } else {
+                    runOnUiThread(() -> polishResult(false,
+                            "请求失败（" + r.code() + "）：" + extractMsg(text)));
+                }
+            } catch (Exception e) {
+                runOnUiThread(() -> polishResult(false, "网络没通：" + e.getMessage()));
+            }
+        }).start();
+    }
+
+    private void polishResult(boolean ok, String text) {
+        if (btnPolishTest != null) btnPolishTest.setEnabled(true);
+        if (tvPolishResult == null) return;
+        tvPolishResult.setVisibility(TextView.VISIBLE);
+        tvPolishResult.setText((ok ? "✓ " : "✕ ") + text);
+        tvPolishResult.setTextColor(ok ? COLOR_GREEN : COLOR_RED);
     }
 
     private static final int COLOR_GREEN = 0xFF22C55E;

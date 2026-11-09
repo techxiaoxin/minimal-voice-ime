@@ -168,7 +168,10 @@ public final class TextPolisher {
             user.addProperty("content", raw);
 
             JsonObject body = new JsonObject();
-            body.addProperty("model", AsrConfig.POLISH_MODEL);
+            String pm = com.minivoice.ime.settings.Prefs.getString(ctx,
+                    com.minivoice.ime.settings.Prefs.K_POLISH_MODEL, AsrConfig.POLISH_MODEL);
+            body.addProperty("model", pm == null || pm.trim().isEmpty()
+                    ? AsrConfig.POLISH_MODEL : pm.trim());
             // 整理这一步只要结果，不要模型先想一段。开着思考会多花一两秒。
             body.addProperty("enable_thinking", false);
             com.google.gson.JsonArray msgs = new com.google.gson.JsonArray();
@@ -179,7 +182,7 @@ public final class TextPolisher {
             body.addProperty("temperature", 0.2);
 
             Request req = new Request.Builder()
-                    .url(AsrConfig.BAILIAN_ENDPOINT)
+                    .url(AsrConfig.polishEndpoint(c.endpoint))
                     .addHeader("Authorization", "Bearer " + key)
                     .post(RequestBody.create(body.toString(),
                             MediaType.parse("application/json; charset=utf-8")))

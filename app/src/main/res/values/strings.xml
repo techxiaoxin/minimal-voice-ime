@@ -58,7 +58,7 @@
     <string name="settings_key_show">显示 Key</string>
     <string name="settings_key_hide">隐藏 Key</string>
     <string name="settings_test_voice">录 3 秒音，测真实识别</string>
-    <string name="settings_test_key">测试 Key 和模型</string>
+    <string name="settings_test_key">测试识别</string>
     <string name="settings_polish">AI 整理文字</string>
     <string name="settings_polish_hint">开启后把话整理成书面语，会多等 1 到 2 秒。</string>
     <string name="polish_engine_cloud">云端整理</string>
