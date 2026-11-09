@@ -93,6 +93,9 @@ public final class Prefs {
 
     /** 累加一次云端整理用掉的 token，顺便记次数。 */
     public static final String K_TOKEN_LOG = "token_log";
+    /** 识别和整理分别累计，两边走的是不同模型，混在一起没法跟控制台对。 */
+    public static final String K_TOKEN_ASR = "token_asr_sum";
+    public static final String K_TOKEN_POLISH = "token_polish_sum";
 
     public static void addTokens(Context ctx, int tokens) {
         addTokens(ctx, tokens, "识别");
@@ -103,6 +106,11 @@ public final class Prefs {
         int n = Math.max(0, tokens);
         putInt(ctx, K_TOKEN_TOTAL, getInt(ctx, K_TOKEN_TOTAL, 0) + n);
         putInt(ctx, K_TOKEN_QUESTS, getInt(ctx, K_TOKEN_QUESTS, 0) + 1);
+        if ("整理".equals(kind)) {
+            putInt(ctx, K_TOKEN_POLISH, getInt(ctx, K_TOKEN_POLISH, 0) + n);
+        } else {
+            putInt(ctx, K_TOKEN_ASR, getInt(ctx, K_TOKEN_ASR, 0) + n);
+        }
 
         long now = System.currentTimeMillis();
         String[] lines = getString(ctx, K_TOKEN_LOG, "").split("\n");
@@ -177,6 +185,8 @@ public final class Prefs {
     public static void resetTokens(Context ctx) {
         putInt(ctx, K_TOKEN_TOTAL, 0);
         putInt(ctx, K_TOKEN_QUESTS, 0);
+        putInt(ctx, K_TOKEN_ASR, 0);
+        putInt(ctx, K_TOKEN_POLISH, 0);
     }
 
     public static List<String> getWordList(Context ctx) {

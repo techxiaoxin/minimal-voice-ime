@@ -381,10 +381,11 @@ public class SettingsActivity extends AppCompatActivity {
         boolean cloudAsr = !com.minivoice.ime.asr.AsrConfig.PROTOCOL_LOCAL.equals(
                 Prefs.getString(this, Prefs.K_PROTOCOL, com.minivoice.ime.asr.AsrConfig.PROTOCOL_BAILIAN));
         boolean cloudPolish = !"local".equals(Prefs.getString(this, Prefs.K_POLISH_ENGINE, "cloud"));
-        int total = Prefs.getInt(this, Prefs.K_TOKEN_TOTAL, 0);
+        int asr = Prefs.getInt(this, Prefs.K_TOKEN_ASR, 0);
+        int polish = Prefs.getInt(this, Prefs.K_TOKEN_POLISH, 0);
         int count = Prefs.getInt(this, Prefs.K_TOKEN_QUESTS, 0);
         tvTokens.setText(String.format(java.util.Locale.CHINA,
-                "云端用量 %s tokens，共 %d 次", formatCount(total), count));
+                "识别 %s · 整理 %s tokens，共 %d 次", formatCount(asr), formatCount(polish), count));
         llTokens.setVisibility(cloudAsr || cloudPolish
                 ? android.view.View.VISIBLE : android.view.View.GONE);
     }
@@ -446,8 +447,10 @@ public class SettingsActivity extends AppCompatActivity {
         sumRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
         sumRow.setPadding(0, dp(6), 0, dp(8));
         android.widget.TextView sum = new android.widget.TextView(this);
-        sum.setText("合计 " + formatCount(total) + " tokens，共 " + count + " 次");
+        sum.setText("识别 " + formatCount(asrSum) + " · 整理 " + formatCount(polishSum)
+                + " tokens，共 " + count + " 次");
         sum.setTextSize(12);
+        sum.setMaxLines(2);
         sum.setTextColor(getColor(R.color.text_secondary));
         sum.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0,
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
