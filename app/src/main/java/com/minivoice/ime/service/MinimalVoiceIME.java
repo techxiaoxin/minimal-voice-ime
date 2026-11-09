@@ -926,64 +926,6 @@ public class MinimalVoiceIME extends InputMethodService {
     }
 
     /** 空格键：轻点有候选就选第一个，没有就打空格；按住 300 毫秒开始说话，上滑取消。 */
-    private View mkSpaceKey() {
-        FrameLayout box = (FrameLayout) LayoutInflater.from(uiCtx)
-                .inflate(R.layout.item_ime_key, null, false);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.MATCH_PARENT, 2.6f);
-        lp.setMargins(dp(2), dp(2), dp(2), dp(2));
-        box.setLayoutParams(lp);
-        TextView key = box.findViewById(R.id.tv_key);
-        key.setText("空格");
-        key.setTextSize(13);
-        box.findViewById(R.id.tv_punc).setVisibility(View.GONE);
-
-        final boolean[] started = {false};
-        final boolean[] cancelZone = {false};
-        final float[] downY = {0};
-        final Runnable[] starter = {null};
-        box.setOnTouchListener((v, e) -> {
-            switch (e.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    downY[0] = e.getY();
-                    started[0] = false;
-                    cancelZone[0] = false;
-                    v.animate().scaleX(1.03f).scaleY(1.03f).setDuration(60).start();
-                    starter[0] = () -> {
-                        started[0] = true;
-                        startVoice();
-                    };
-                    main.postDelayed(starter[0], 300);
-                    return true;
-                case MotionEvent.ACTION_MOVE:
-                    if (started[0]) {
-                        cancelZone[0] = downY[0] - e.getY() > 52 * getResources().getDisplayMetrics().density;
-                    }
-                    return true;
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
-                    v.animate().scaleX(1f).scaleY(1f).setDuration(80).start();
-                    if (starter[0] != null) main.removeCallbacks(starter[0]);
-                    if (started[0]) {
-                        started[0] = false;
-                        if (cancelZone[0]) {
-                            cancelVoice();
-                        } else {
-                            stopVoice();
-                        }
-                    } else if (e.getActionMasked() == MotionEvent.ACTION_UP) {
-                        v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-                        fullSpace();
-                        vibrate(6);
-                    }
-                    return true;
-                default:
-                    return false;
-            }
-        });
-        return box;
-    }
-
     private void onFullLetter(String key) {
         InputConnection ic = getCurrentInputConnection();
         if (ic == null) return;
