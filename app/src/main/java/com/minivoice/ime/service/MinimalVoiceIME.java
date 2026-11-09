@@ -31,6 +31,8 @@ import android.view.Window;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.view.inputmethod.InputConnection;
+import android.view.inputmethod.ExtractedText;
+import android.view.inputmethod.ExtractedTextRequest;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.ImageButton;
@@ -384,21 +386,55 @@ public class MinimalVoiceIME extends InputMethodService {
                     if (holdStarted) {
                         holdStarted = false;
                         stopVoice();
-                    } else if (Prefs.getString(this, Prefs.K_SPACE_MODE, Prefs.SPACE_SEND)
-                            .equals(Prefs.SPACE_SEND)
-                            && SystemClock.uptimeMillis() - lastVoiceDoneAt < 20000) {
-                        // 刚转完字，点一下就当回车发送
+                    } else if (composing.length() > 0) {
+                        // 正在拼拼音：点一下就是把第一个候选上屏，没候选就当空格
+                        v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                        fullSpace();
+                    } else if (editorHasText()) {
+                        // 字已经打完了：点一下就发送
                         v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
                         performSend();
                     } else {
-                        // 平时点一下就是空格键
+                        // 什么都没有的时候不出空格，提示一下按住的用法
                         v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-                        insertSpace();
+                        Toast.makeText(this, "按住说话", Toast.LENGTH_SHORT).show();
                     }
                     return true;
             }
             return false;
         });
+    }
+
+    /** 文字输入到哪一步了，决定底下大按键是空格、发送还是按住说话。 */
+    private boolean editorHasText() {
+        InputConnection ic = getCurrentInputConnection();
+        if (ic == null) return false;
+        try {
+            ExtractedTextRequest req = new ExtractedTextRequest();
+            req.flags = 0;
+            req.hintMaxChars = 0;
+            req.hintMaxLines = 0;
+            ExtractedText et = ic.getExtractedText(req, 0);
+            return et != null && et.text != null && et.text.length() > 0;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private void updateVoiceBar() {
+        if (tvStatus == null || btnVoice == null) return;
+        if (recording) return;
+        String label;
+        if (fullMode && composing.length() > 0) {
+            label = "空格";
+        } else if (editorHasText()) {
+            label = "发送";
+        } else {
+            label = "按住说话";
+        }
+        if (!label.contentEquals(tvStatus.getText())) tvStatus.setText(label);
+        if (ivMic != null) ivMic.setVisibility(("按住说话".equals(label) && !fullMode)
+                ? View.VISIBLE : View.GONE);
     }
 
     private Handler deleteHandler;
@@ -415,7 +451,7 @@ public class MinimalVoiceIME extends InputMethodService {
         btnDelete.setOnTouchListener((v, e) -> {
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
-                    deleteOnce();
+                    deleteOneStep();
                     v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                     startRepeatDelete();
                     return true;
@@ -429,13 +465,23 @@ public class MinimalVoiceIME extends InputMethodService {
         });
     }
 
+    /** 删一次：有拼音串就退字母，没有才真的删输入框里的字。 */
+    private void deleteOneStep() {
+        if (composing.length() > 0) {
+            fullDelete();
+        } else {
+            deleteOnce();
+        }
+        updateVoiceBar();
+    }
+
     private void startRepeatDelete() {
         if (deleteHandler == null) deleteHandler = new Handler(Looper.getMainLooper());
         stopRepeatDelete();
         deleteRunnable = new Runnable() {
             @Override
             public void run() {
-                deleteOnce();
+                deleteOneStep();
                 deleteHandler.postDelayed(this, 60);
             }
         };
@@ -739,7 +785,6 @@ public class MinimalVoiceIME extends InputMethodService {
         addLetterRow(new String[]{"a", "s", "d", "f", "g", "h", "j", "k", "l"},
                 new String[]{"）", "@", "#", "%", "&", "*", "-", "=", "+"});
         addLastRow();
-        addSpaceRow();
     }
 
     private void addDigitRow() {
@@ -783,13 +828,6 @@ public class MinimalVoiceIME extends InputMethodService {
             rebuildFullRows();
             refreshCand();
         }, null));
-        llFullRows.addView(row);
-    }
-
-    /** 单独一条空格，轻点选字或打空格，按住说话。 */
-    private void addSpaceRow() {
-        LinearLayout row = newRow(36);
-        row.addView(mkSpaceKey());
         llFullRows.addView(row);
     }
 
@@ -995,6 +1033,7 @@ public class MinimalVoiceIME extends InputMethodService {
         if (llCandBar == null) return;
         llCandBar.removeAllViews();
         candList.clear();
+        updateVoiceBar();
         if (composing.length() == 0) {
             TextView hint = new TextView(uiCtx);
             hint.setText(pinyinMode ? "拼音输入，点候选上屏" : "英文输入");
@@ -1003,6 +1042,7 @@ public class MinimalVoiceIME extends InputMethodService {
             hint.setGravity(Gravity.CENTER_VERTICAL);
             llCandBar.addView(hint, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            updateVoiceBar();
             return;
         }
         String letters = composing.toString();
@@ -1014,8 +1054,10 @@ public class MinimalVoiceIME extends InputMethodService {
             tv.setGravity(Gravity.CENTER_VERTICAL);
             llCandBar.addView(tv, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            updateVoiceBar();
             return;
         }
+        updateVoiceBar();
         candList.addAll(com.minivoice.ime.input.PinyinDict.get(this).candidates(letters, 18));
         if (candList.isEmpty()) {
             TextView tv = new TextView(uiCtx);
@@ -1053,6 +1095,7 @@ public class MinimalVoiceIME extends InputMethodService {
         composing.setLength(0);
         candList.clear();
         refreshCand();
+        updateVoiceBar();
     }
     private void onNumberKey(String key) {
         commitKey(key);
