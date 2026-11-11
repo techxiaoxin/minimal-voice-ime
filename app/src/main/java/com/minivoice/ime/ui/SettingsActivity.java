@@ -62,12 +62,6 @@ public class SettingsActivity extends AppCompatActivity {
     private TextView tvModelHint;
     private ProgressOutlineButton btnFetchModels;
     private ProgressOutlineButton btnPolishFetch;
-    private android.widget.ProgressBar pbFetchModels;
-    private android.widget.ProgressBar pbPolishFetch;
-    private android.widget.LinearLayout llFetchProgress;
-    private android.widget.LinearLayout llPolishFetchProgress;
-    private TextView tvFetchPct;
-    private TextView tvPolishFetchPct;
     private Button btnPolishCloud;
     private Button btnPolishLocal;
     private TextView btnPolishSync;
@@ -186,12 +180,6 @@ public class SettingsActivity extends AppCompatActivity {
         });
         btnFetchModels = findViewById(R.id.btn_fetch_models);
         btnPolishFetch = findViewById(R.id.btn_polish_fetch);
-        pbFetchModels = findViewById(R.id.pb_fetch_models);
-        pbPolishFetch = findViewById(R.id.pb_polish_fetch);
-        llFetchProgress = findViewById(R.id.ll_fetch_progress);
-        llPolishFetchProgress = findViewById(R.id.ll_polish_fetch_progress);
-        tvFetchPct = findViewById(R.id.tv_fetch_pct);
-        tvPolishFetchPct = findViewById(R.id.tv_polish_pct);
         TextView streamLegend = findViewById(R.id.tv_stream_legend);
         if (streamLegend != null) {
             String legend = "黑色字体不支持流式输入    绿色字体支持流式输入";
@@ -1823,15 +1811,29 @@ public class SettingsActivity extends AppCompatActivity {
         return v;
     }
 
+    private long fetchProgressStartedAt;
+    private int fetchProgressRun;
+
     /** 按钮边缘一圈描边加按钮内百分比，一起显示、一起收起。 */
     private void setFetchProgressVisible(boolean polish, boolean visible) {
-        android.widget.LinearLayout row = polish ? llPolishFetchProgress : llFetchProgress;
-        if (row != null) row.setVisibility(android.view.View.GONE);
-        ProgressOutlineButton btn = polish ? btnPolishFetch : btnFetchModels;
-        if (btn != null) {
-            btn.setPercentVisible(visible);
-            if (visible) btn.setProgress(0);
+        final ProgressOutlineButton btn = polish ? btnPolishFetch : btnFetchModels;
+        if (btn == null) return;
+        if (visible) {
+            fetchProgressRun++;
+            fetchProgressStartedAt = android.os.SystemClock.uptimeMillis();
+            btn.setPercentVisible(true);
+            btn.setProgress(0);
+            return;
         }
+        final int run = fetchProgressRun;
+        long elapsed = android.os.SystemClock.uptimeMillis() - fetchProgressStartedAt;
+        // 读完先让 100% 的动画走完，再收起，避免进度圈一闪就没。
+        long delay = Math.max(700, 1500 - elapsed);
+        btn.postDelayed(() -> {
+            if (run != fetchProgressRun) return;
+            btn.setPercentVisible(false);
+            btn.setProgress(0);
+        }, delay);
     }
 
     private void setFetchPct(boolean polish, int pct) {
@@ -1888,7 +1890,6 @@ public class SettingsActivity extends AppCompatActivity {
                         + (err.isEmpty() ? "" : " " + err));
                 runOnUiThread(() -> {
                     btn.setEnabled(true);
-                    btn.setProgress(0);
                     setFetchProgressVisible(polish, false);
                     btn.setText(R.string.settings_fetch_models);
                     if (polish) {
@@ -1931,8 +1932,8 @@ public class SettingsActivity extends AppCompatActivity {
             final java.util.List<String> fIds = result;
             runOnUiThread(() -> {
                 btn.setEnabled(true);
-                btn.setProgress(0);
                 btn.setText(R.string.settings_fetch_models);
+                setFetchPct(polish, 100);
                 setFetchProgressVisible(polish, false);
                 if (fIds.isEmpty()) {
                     logSettingsDiag("ERROR MODELS_NO_USABLE " + (polish ? "polish" : "asr")

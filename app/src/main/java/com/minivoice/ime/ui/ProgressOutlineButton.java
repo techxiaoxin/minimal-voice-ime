@@ -85,7 +85,7 @@ public class ProgressOutlineButton extends AppCompatButton {
             return;
         }
         animator = ValueAnimator.ofFloat(shownProgress, p);
-        animator.setDuration(260);
+        animator.setDuration(450);
         animator.setInterpolator(new DecelerateInterpolator());
         animator.addUpdateListener(a -> {
             shownProgress = (float) a.getAnimatedValue();
@@ -145,21 +145,26 @@ public class ProgressOutlineButton extends AppCompatButton {
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         if (path.isEmpty()) buildPath();
+    }
+
+    @Override
+    protected void dispatchDraw(Canvas canvas) {
+        super.dispatchDraw(canvas);
+        if (!showPercent) return;
+        if (path.isEmpty()) buildPath();
         if (path.isEmpty()) return;
-        // 只有读取时才画底圈和进度，平时保持普通按钮边框。
-        if (showPercent) canvas.drawPath(path, track);
-        if (showPercent && shownProgress > 0f) {
+        // 画在按钮内容之上，避免被按钮背景或状态刷新盖掉。
+        canvas.drawPath(path, track);
+        if (shownProgress > 0f) {
             barPath.reset();
             float len = measure.getLength();
             measure.getSegment(0f, len * shownProgress / 100f, barPath, true);
             canvas.drawPath(barPath, bar);
         }
-        if (showPercent) {
-            String pct = Math.round(shownProgress) + "%";
-            float baseline = getHeight() / 2f
-                    - (percentPaint.ascent() + percentPaint.descent()) / 2f;
-            canvas.drawText(pct, getWidth() - percentPadding, baseline, percentPaint);
-        }
+        String pct = Math.round(shownProgress) + "%";
+        float baseline = getHeight() / 2f
+                - (percentPaint.ascent() + percentPaint.descent()) / 2f;
+        canvas.drawText(pct, getWidth() - percentPadding, baseline, percentPaint);
     }
 
     @Override
