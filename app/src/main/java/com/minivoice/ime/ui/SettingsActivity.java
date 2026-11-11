@@ -1823,17 +1823,20 @@ public class SettingsActivity extends AppCompatActivity {
         return v;
     }
 
-    /** 数字进度条和按钮描边用同一个百分比，一起显示、一起收起。 */
+    /** 按钮边缘一圈描边加按钮内百分比，一起显示、一起收起。 */
     private void setFetchProgressVisible(boolean polish, boolean visible) {
         android.widget.LinearLayout row = polish ? llPolishFetchProgress : llFetchProgress;
-        if (row != null) row.setVisibility(visible
-                ? android.view.View.VISIBLE : android.view.View.GONE);
-        if (visible) setFetchPct(polish, 0);
+        if (row != null) row.setVisibility(android.view.View.GONE);
+        ProgressOutlineButton btn = polish ? btnPolishFetch : btnFetchModels;
+        if (btn != null) {
+            btn.setPercentVisible(visible);
+            if (visible) btn.setProgress(0);
+        }
     }
 
     private void setFetchPct(boolean polish, int pct) {
-        TextView tv = polish ? tvPolishFetchPct : tvFetchPct;
-        if (tv != null) tv.setText(Math.max(0, Math.min(100, pct)) + "%");
+        ProgressOutlineButton btn = polish ? btnPolishFetch : btnFetchModels;
+        if (btn != null) btn.setProgress(pct);
     }
 
     /** 读取模型列表，只留这一类里真能跑通的，再挂成下拉。 */
@@ -1862,15 +1865,12 @@ public class SettingsActivity extends AppCompatActivity {
         }
         final AutoCompleteTextView target = polish ? etPolishModel : etModel;
         final ProgressOutlineButton btn = polish ? btnPolishFetch : btnFetchModels;
-        final android.widget.ProgressBar pb = polish ? pbPolishFetch : pbFetchModels;
         final String ep = endpoint;
         final String apiKey = key;
         btn.setEnabled(false);
         btn.setProgress(0);
         btn.setText(R.string.settings_fetch_models);
-        if (pb != null) {
-            pb.setProgress(0, true);
-        }
+
         setFetchProgressVisible(polish, true);
         Toast.makeText(this, R.string.models_fetching, Toast.LENGTH_SHORT).show();
         new Thread(() -> {
@@ -1916,8 +1916,6 @@ public class SettingsActivity extends AppCompatActivity {
                     int d = done.incrementAndGet();
                     int pct = total <= 0 ? 100 : d * 100 / total;
                     runOnUiThread(() -> {
-                        btn.setProgress(pct);
-                        if (pb != null) pb.setProgress(pct, true);
                         setFetchPct(polish, pct);
                     });
                 });

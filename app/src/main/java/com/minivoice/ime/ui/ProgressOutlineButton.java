@@ -19,6 +19,7 @@ public class ProgressOutlineButton extends AppCompatButton {
 
     private final Paint track = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint bar = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint percentPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path path = new Path();
     private final Path barPath = new Path();
     private final PathMeasure measure = new PathMeasure();
@@ -28,6 +29,8 @@ public class ProgressOutlineButton extends AppCompatButton {
     private float shownProgress = 0f;
     private float stroke;
     private float cornerRadius;
+    private float percentPadding;
+    private boolean showPercent;
     private ValueAnimator animator;
 
     public ProgressOutlineButton(Context context) {
@@ -47,17 +50,24 @@ public class ProgressOutlineButton extends AppCompatButton {
 
     private void init(Context context) {
         float density = context.getResources().getDisplayMetrics().density;
-        stroke = 2.5f * density;
+        stroke = 4f * density;
         // 和 bg_btn_secondary 的 14dp 圆角保持一致，描边才会贴着按钮真实边缘。
         cornerRadius = 14f * density;
+        percentPadding = 10f * density;
+        percentPaint.setTextSize(11f * density);
+        percentPaint.setFakeBoldText(true);
+        percentPaint.setTextAlign(Paint.Align.RIGHT);
+        percentPaint.setColor(context.getResources().getColor(R.color.text_secondary, null));
         track.setStyle(Paint.Style.STROKE);
         track.setStrokeWidth(stroke);
         track.setColor(context.getResources().getColor(R.color.text_hint, null));
-        track.setAlpha(120);
+        track.setAlpha(150);
+        track.setStrokeCap(Paint.Cap.ROUND);
         bar.setStyle(Paint.Style.STROKE);
         bar.setStrokeWidth(stroke);
         bar.setColor(context.getResources().getColor(R.color.accent, null));
         bar.setAlpha(255);
+        bar.setStrokeCap(Paint.Cap.ROUND);
     }
 
     /** 0 到 100，0 时不画。 */
@@ -86,6 +96,13 @@ public class ProgressOutlineButton extends AppCompatButton {
 
     public int getProgress() {
         return progress;
+    }
+
+    /** 百分比数字画在按钮里面，不再单独占用一条横向进度条。 */
+    public void setPercentVisible(boolean visible) {
+        if (showPercent == visible) return;
+        showPercent = visible;
+        invalidate();
     }
 
     private void buildPath() {
@@ -129,13 +146,20 @@ public class ProgressOutlineButton extends AppCompatButton {
         super.onDraw(canvas);
         if (path.isEmpty()) buildPath();
         if (path.isEmpty()) return;
-        // 底圈始终画出来，读取时高亮进度顺着按钮边缘跑。
-        canvas.drawPath(path, track);
-        if (shownProgress <= 0f) return;
-        barPath.reset();
-        float len = measure.getLength();
-        measure.getSegment(0f, len * shownProgress / 100f, barPath, true);
-        canvas.drawPath(barPath, bar);
+        // 只有读取时才画底圈和进度，平时保持普通按钮边框。
+        if (showPercent) canvas.drawPath(path, track);
+        if (showPercent && shownProgress > 0f) {
+            barPath.reset();
+            float len = measure.getLength();
+            measure.getSegment(0f, len * shownProgress / 100f, barPath, true);
+            canvas.drawPath(barPath, bar);
+        }
+        if (showPercent) {
+            String pct = Math.round(shownProgress) + "%";
+            float baseline = getHeight() / 2f
+                    - (percentPaint.ascent() + percentPaint.descent()) / 2f;
+            canvas.drawText(pct, getWidth() - percentPadding, baseline, percentPaint);
+        }
     }
 
     @Override
