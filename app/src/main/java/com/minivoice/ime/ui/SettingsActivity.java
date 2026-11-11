@@ -60,8 +60,10 @@ public class SettingsActivity extends AppCompatActivity {
     private AutoCompleteTextView etModel;
     private AutoCompleteTextView etPolishModel;
     private TextView tvModelHint;
-    private ProgressOutlineButton btnFetchModels;
-    private ProgressOutlineButton btnPolishFetch;
+    private Button btnFetchModels;
+    private Button btnPolishFetch;
+    private ProgressRingView ringFetchModels;
+    private ProgressRingView ringPolishFetch;
     private Button btnPolishCloud;
     private Button btnPolishLocal;
     private TextView btnPolishSync;
@@ -180,6 +182,8 @@ public class SettingsActivity extends AppCompatActivity {
         });
         btnFetchModels = findViewById(R.id.btn_fetch_models);
         btnPolishFetch = findViewById(R.id.btn_polish_fetch);
+        ringFetchModels = findViewById(R.id.ring_fetch_models);
+        ringPolishFetch = findViewById(R.id.ring_polish_fetch);
         TextView streamLegend = findViewById(R.id.tv_stream_legend);
         if (streamLegend != null) {
             String legend = "黑色字体不支持流式输入    绿色字体支持流式输入";
@@ -1816,29 +1820,32 @@ public class SettingsActivity extends AppCompatActivity {
 
     /** 按钮边缘一圈描边加按钮内百分比，一起显示、一起收起。 */
     private void setFetchProgressVisible(boolean polish, boolean visible) {
-        final ProgressOutlineButton btn = polish ? btnPolishFetch : btnFetchModels;
-        if (btn == null) return;
+        final ProgressRingView ring = polish ? ringPolishFetch : ringFetchModels;
+        if (ring == null) return;
         if (visible) {
             fetchProgressRun++;
             fetchProgressStartedAt = android.os.SystemClock.uptimeMillis();
-            btn.setPercentVisible(true);
-            btn.setProgress(0);
+            ring.setRingVisible(true);
+            ring.setIndeterminate(true);
+            ring.setProgress(0);
             return;
         }
         final int run = fetchProgressRun;
         long elapsed = android.os.SystemClock.uptimeMillis() - fetchProgressStartedAt;
         // 读完先让 100% 的动画走完，再收起，避免进度圈一闪就没。
         long delay = Math.max(700, 1500 - elapsed);
-        btn.postDelayed(() -> {
+        ring.postDelayed(() -> {
             if (run != fetchProgressRun) return;
-            btn.setPercentVisible(false);
-            btn.setProgress(0);
+            ring.setRingVisible(false);
+            ring.setProgress(0);
         }, delay);
     }
 
     private void setFetchPct(boolean polish, int pct) {
-        ProgressOutlineButton btn = polish ? btnPolishFetch : btnFetchModels;
-        if (btn != null) btn.setProgress(pct);
+        ProgressRingView ring = polish ? ringPolishFetch : ringFetchModels;
+        if (ring == null) return;
+        ring.setIndeterminate(false);
+        ring.setProgress(pct);
     }
 
     /** 读取模型列表，只留这一类里真能跑通的，再挂成下拉。 */
@@ -1866,11 +1873,12 @@ public class SettingsActivity extends AppCompatActivity {
             return;
         }
         final AutoCompleteTextView target = polish ? etPolishModel : etModel;
-        final ProgressOutlineButton btn = polish ? btnPolishFetch : btnFetchModels;
+        final Button btn = polish ? btnPolishFetch : btnFetchModels;
+        final ProgressRingView ring = polish ? ringPolishFetch : ringFetchModels;
         final String ep = endpoint;
         final String apiKey = key;
         btn.setEnabled(false);
-        btn.setProgress(0);
+        ring.setProgress(0);
         btn.setText(R.string.settings_fetch_models);
 
         setFetchProgressVisible(polish, true);
@@ -1902,6 +1910,12 @@ public class SettingsActivity extends AppCompatActivity {
                 return;
             }
 
+            runOnUiThread(() -> {
+                if (ring != null) {
+                    ring.setIndeterminate(false);
+                    ring.setProgress(0);
+                }
+            });
             final int total = ids.size();
             final java.util.concurrent.atomic.AtomicInteger done =
                     new java.util.concurrent.atomic.AtomicInteger(0);
