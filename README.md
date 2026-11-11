@@ -1,6 +1,8 @@
 # 极简语音输入法 Minimal Voice IME
 
-作者：@科技小辛　[微博](https://weibo.com/1595443924)　[抖音](https://www.douyin.com/user/MS4wLjABAAAA9SV_GSD6dDUM8BJqVdW4z3nBAEWc1Xo2q_Jr2WzG-uk?from_tab_name=main)　[小红书](https://www.xiaohongshu.com/user/profile/5cd95d1e0000000011015d9c)
+### 作者：@科技小辛
+
+**[微博](https://weibo.com/1595443924)　[抖音](https://www.douyin.com/user/MS4wLjABAAAA9SV_GSD6dDUM8BJqVdW4z3nBAEWc1Xo2q_Jr2WzG-uk?from_tab_name=main)　[小红书](https://www.xiaohongshu.com/user/profile/5cd95d1e0000000011015d9c)**
 
 一个不占屏幕的安卓语音输入法。默认只留一条语音栏，按住说话，松手转成文字，AI 整理完点一下发送。需要手打的时候再展开全键盘，不需要为了说一句话先把整块键盘顶上来。
 
@@ -160,12 +162,8 @@ app/src/main/java/com/minivoice/ime/
 - 拼音表只收了词频 100 以上的词，很冷僻的词和个别长串会切得不够漂亮。
 - ARM 的 Mac 上开安卓模拟器需要虚拟化权限，某些环境跑不起来，这部分只能真机验。
 
-## 作者
+## 作者：@科技小辛
 
-@科技小辛
-
-- 微博：https://weibo.com/1595443924
-- 抖音：https://www.douyin.com/user/MS4wLjABAAAA9SV_GSD6dDUM8BJqVdW4z3nBAEWc1Xo2q_Jr2WzG-uk?from_tab_name=main
-- 小红书：https://www.xiaohongshu.com/user/profile/5cd95d1e0000000011015d9c
+**[微博](https://weibo.com/1595443924)　[抖音](https://www.douyin.com/user/MS4wLjABAAAA9SV_GSD6dDUM8BJqVdW4z3nBAEWc1Xo2q_Jr2WzG-uk?from_tab_name=main)　[小红书](https://www.xiaohongshu.com/user/profile/5cd95d1e0000000011015d9c)**
 
 本项目采用 MIT 许可，见 LICENSE。
