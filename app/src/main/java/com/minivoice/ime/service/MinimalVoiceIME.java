@@ -1707,6 +1707,8 @@ public class MinimalVoiceIME extends InputMethodService {
     public void stopVoice() {
         if (!recording) return;
         recording = false;
+        // 松手后先把红色波形收掉，再进入等待进度，避免波形和进度条同时叠在语音条上
+        flashAccent(false);
 
         if (engine != null && engine.managesOwnAudio()) {
             waiting = true;

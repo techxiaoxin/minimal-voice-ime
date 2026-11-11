@@ -1,6 +1,9 @@
 package com.minivoice.ime.ui;
 
 import android.Manifest;
+import android.app.Dialog;
+import android.content.res.ColorStateList;
+import android.graphics.Color;
 import android.content.pm.PackageManager;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
@@ -17,6 +20,7 @@ import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
+import android.widget.ProgressBar;
 import android.widget.RadioGroup;
 import android.view.View;
 import android.widget.TextView;
@@ -37,8 +41,10 @@ import com.minivoice.ime.asr.LocalLlmModel;
 import com.minivoice.ime.asr.LocalModelManager;
 import com.minivoice.ime.settings.Prefs;
 import com.minivoice.ime.sync.LanSyncManager;
+import com.minivoice.ime.update.UpdateManager;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.net.Proxy;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -54,6 +60,12 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 
 public class SettingsActivity extends AppCompatActivity {
+
+    private TextView tvUpdateDot;
+    private TextView tvCheckUpdate;
+    private UpdateManager.UpdateInfo pendingUpdate;
+    private File pendingInstallFile;
+    private boolean updateChecking;
 
     private EditText etEndpoint;
     private EditText etApikey;
@@ -347,12 +359,13 @@ public class SettingsActivity extends AppCompatActivity {
         btnDownload.setOnClickListener(v -> onLocalModelButton());
 
         TextView tvVersion = findViewById(R.id.tv_version);
-        try {
-            String vn = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
-            tvVersion.setText("v" + vn);
-        } catch (Exception ignored) {
-            tvVersion.setText("v?");
-        }
+        tvVersion.setText(UpdateManager.versionLabel(this));
+        tvUpdateDot = findViewById(R.id.tv_update_dot);
+        tvCheckUpdate = findViewById(R.id.tv_check_update);
+        LinearLayout llVersion = findViewById(R.id.ll_version);
+        if (llVersion != null) llVersion.setOnClickListener(v -> onUpdateEntry());
+        if (tvCheckUpdate != null) tvCheckUpdate.setOnClickListener(v -> onUpdateEntry());
+        checkForUpdate(false);
 
         tvTest.setOnClickListener(v -> {
             CharSequence t = tvTest.getText();
@@ -425,6 +438,15 @@ public class SettingsActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        // 从“允许安装未知应用”的系统页回来，权限拿到了就继续装
+        if (pendingInstallFile != null && pendingInstallFile.exists()
+                && UpdateManager.canInstall(this)) {
+            File apk = pendingInstallFile;
+            pendingInstallFile = null;
+            if (!UpdateManager.install(this, apk)) {
+                Toast.makeText(this, "打开安装器失败，请再点一次检查更新", Toast.LENGTH_LONG).show();
+            }
+        }
         // 回到设置页先刷一次用量，识别和整理每次记账后这里都能看到新数字
         renderTokens();
         String name = TextUtils.isEmpty(etDevice.getText())
@@ -2804,6 +2826,160 @@ public class SettingsActivity extends AppCompatActivity {
             android.view.ViewGroup g = (android.view.ViewGroup) v;
             for (int i = 0; i < g.getChildCount(); i++) normalizeButtons(g.getChildAt(i));
         }
+    }
+
+    /** 点右上角版本号，或者滚到底部点“检查更新”，都走这里。 */
+    private void onUpdateEntry() {
+        if (pendingUpdate != null) {
+            showUpdateDialog(pendingUpdate);
+        } else {
+            checkForUpdate(true);
+        }
+    }
+
+    private void checkForUpdate(boolean manual) {
+        if (updateChecking) return;
+        updateChecking = true;
+        if (manual && tvCheckUpdate != null) tvCheckUpdate.setText("正在检查更新…");
+        UpdateManager.check(this, (info, error) -> {
+            updateChecking = false;
+            if (tvCheckUpdate != null) tvCheckUpdate.setText("检查更新");
+            if (info != null) {
+                pendingUpdate = info;
+                if (tvUpdateDot != null) tvUpdateDot.setVisibility(View.VISIBLE);
+                if (manual) showUpdateDialog(info);
+            } else {
+                pendingUpdate = null;
+                if (tvUpdateDot != null) tvUpdateDot.setVisibility(View.GONE);
+                if (manual) {
+                    String msg = error == null
+                            ? "当前已经是最新版本 " + UpdateManager.versionLabel(this)
+                            : "检查更新失败：" + error;
+                    showCardDialog("检查更新", msg, null, "知道了", null);
+                }
+            }
+        });
+    }
+
+    /** 更新说明和下载进度放在同一个卡片里，下载完直接拉起系统安装器。 */
+    private void showUpdateDialog(UpdateManager.UpdateInfo info) {
+        final Dialog d = new Dialog(this);
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(18), dp(16), dp(18), dp(14));
+        box.setBackgroundResource(R.drawable.bg_card);
+
+        TextView head = new TextView(this);
+        head.setText("发现新版本 v" + info.versionName);
+        head.setTextSize(15);
+        head.setTextColor(getColor(R.color.text_primary));
+        head.setTypeface(null, android.graphics.Typeface.BOLD);
+        box.addView(head);
+
+        TextView body = new TextView(this);
+        String notes = TextUtils.isEmpty(info.notes) ? "包含一些界面和稳定性改进。" : info.notes;
+        body.setText("当前版本 " + UpdateManager.versionLabel(this)
+                + "\n\n" + notes);
+        body.setTextSize(12);
+        body.setTextColor(getColor(R.color.text_secondary));
+        body.setLineSpacing(dp(2), 1f);
+        body.setPadding(0, dp(8), 0, dp(10));
+        box.addView(body);
+
+        ProgressBar bar = new ProgressBar(this, null,
+                android.R.attr.progressBarStyleHorizontal);
+        bar.setMax(100);
+        bar.setProgress(0);
+        bar.setIndeterminate(false);
+        bar.setProgressTintList(ColorStateList.valueOf(getColor(R.color.accent)));
+        bar.setProgressBackgroundTintList(ColorStateList.valueOf(getColor(R.color.divider)));
+        bar.setVisibility(View.GONE);
+        LinearLayout.LayoutParams barLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(3));
+        barLp.bottomMargin = dp(10);
+        bar.setLayoutParams(barLp);
+        box.addView(bar);
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.END);
+
+        if (!info.force) {
+            TextView later = mkChip("稍后", false);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(36), 1f);
+            later.setLayoutParams(lp);
+            later.setOnClickListener(v -> d.dismiss());
+            row.addView(later);
+        }
+
+        TextView action = mkChip("下载更新", true);
+        LinearLayout.LayoutParams lp2 = new LinearLayout.LayoutParams(
+                info.force ? LinearLayout.LayoutParams.MATCH_PARENT : 0,
+                dp(36), info.force ? 0f : 1f);
+        if (!info.force) lp2.setMarginStart(dp(8));
+        action.setLayoutParams(lp2);
+        row.addView(action);
+        box.addView(row);
+
+        action.setOnClickListener(v -> {
+            if (!v.isEnabled()) return;
+            v.setEnabled(false);
+            v.setAlpha(0.55f);
+            action.setText("下载中…");
+            bar.setVisibility(View.VISIBLE);
+            body.setText("正在下载 v" + info.versionName + "，请保持网络连接。");
+            UpdateManager.download(this, info, new UpdateManager.DownloadCallback() {
+                @Override
+                public void onProgress(int percent, long downloaded, long total) {
+                    if (!d.isShowing()) return;
+                    bar.setProgress(percent >= 0 ? percent : 0);
+                    if (percent >= 0) {
+                        body.setText("正在下载 v" + info.versionName + "  " + percent + "%");
+                    } else {
+                        body.setText("正在下载 v" + info.versionName + "…");
+                    }
+                }
+
+                @Override
+                public void onDone(File apk) {
+                    if (!d.isShowing()) return;
+                    bar.setProgress(100);
+                    action.setText("下载完成");
+                    if (UpdateManager.canInstall(SettingsActivity.this)) {
+                        d.dismiss();
+                        if (!UpdateManager.install(SettingsActivity.this, apk)) {
+                            Toast.makeText(SettingsActivity.this,
+                                    "打开安装器失败，请再点一次检查更新",
+                                    Toast.LENGTH_LONG).show();
+                        }
+                    } else {
+                        pendingInstallFile = apk;
+                        body.setText("下载完成。请在系统设置里允许“安装未知应用”，返回后会自动继续安装。");
+                        d.dismiss();
+                        UpdateManager.requestInstallPermission(SettingsActivity.this);
+                    }
+                }
+
+                @Override
+                public void onError(String message) {
+                    if (!d.isShowing()) return;
+                    bar.setVisibility(View.GONE);
+                    body.setText(message);
+                    action.setEnabled(true);
+                    action.setAlpha(1f);
+                    action.setText("重新下载");
+                }
+            });
+        });
+
+        d.setContentView(box);
+        android.view.Window w = d.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+            w.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.86),
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+        d.show();
     }
 
     private void showCardDialog(String title, String message, String negText,

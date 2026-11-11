@@ -1,0 +1,8 @@
+{
+  "versionCode": 141,
+  "versionName": "0.6.38",
+  "apkUrl": "https://gitee.com/techman68/minimal-voice-ime/releases/download/v0.6.38/minimal-voice-0.6.38-debug.apk",
+  "sha256": "e068ad7b42cc60b554aa7ac7ab446b814e4580a19aa2b17ad0cb5329d5753c2f",
+  "notes": "1. 设置页版本号支持检查更新，有新版本时显示红点，点开可以看更新说明、下载并安装。\n2. 长语音松开后先收起红色波形，再显示横向进度条，转写完成后再进入后续动效。",
+  "force": false
+}
