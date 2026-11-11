@@ -8,6 +8,8 @@ import android.animation.ValueAnimator;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.inputmethodservice.InputMethodService;
 import android.os.Build;
@@ -37,6 +39,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
+import android.widget.PopupWindow;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -76,6 +79,7 @@ public class MinimalVoiceIME extends InputMethodService {
     private static volatile boolean active = false;
 
     private View btnVoice;
+    private TextView btnFullLang;
     private ImageButton btnDelete;
     private ImageButton btnSend;
     private ImageButton btnSettings;
@@ -123,6 +127,15 @@ public class MinimalVoiceIME extends InputMethodService {
     private LinearLayout llFullRows;
     private View flKeysRow;
     private boolean fullMode = false;
+    private PopupWindow keyPopup;
+    private TextView keyPopupUpper;
+    private TextView keyPopupSymbol;
+    private float keyPopupTopRaw;
+    private float keyPopupBottomRaw;
+    private int keyPopupHeightPx;
+    private boolean keyPopupSymbolSelected;
+    private String keyPopupUpperText;
+    private String keyPopupSymbolText;
     private boolean pinyinMode = true;
     private boolean shiftOn = false;
     private final StringBuilder composing = new StringBuilder();
@@ -139,11 +152,14 @@ public class MinimalVoiceIME extends InputMethodService {
     private boolean voiceCanceled = false;
     private float downY = 0f;
     private boolean hasComposing = false;
+    /** 流式识别挂在输入框里的那段文字，删除键要能自己处理掉。 */
+    private String voiceComposing = "";
     private Runnable holdStarter;
 
     private final AudioRecorder recorder = new AudioRecorder();
     private AsrEngine engine;
     private boolean recording = false;
+    private long voiceStartedAt = 0;
     private boolean waiting = false;
 
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -204,6 +220,17 @@ public class MinimalVoiceIME extends InputMethodService {
         View root = inflater.inflate(R.layout.keyboard_view, null, false);
 
         btnVoice = root.findViewById(R.id.btn_voice);
+        btnFullLang = root.findViewById(R.id.btn_full_lang);
+        if (btnFullLang != null) {
+            btnFullLang.setOnClickListener(v -> {
+                pinyinMode = !pinyinMode;
+                shiftOn = false;
+                clearComposing();
+                rebuildFullRows();
+                refreshCand();
+                updateFullLangLabel();
+            });
+        }
         btnDelete = root.findViewById(R.id.btn_delete);
         btnSend = root.findViewById(R.id.btn_send);
         btnSettings = root.findViewById(R.id.btn_settings);
@@ -322,6 +349,7 @@ public class MinimalVoiceIME extends InputMethodService {
 
     @Override
     public void onFinishInputView(boolean finishingInput) {
+        dismissKeyPopup();
         active = false;
         stopEverything();
         super.onFinishInputView(finishingInput);
@@ -393,13 +421,28 @@ public class MinimalVoiceIME extends InputMethodService {
                         holdStarted = false;
                         stopVoice();
                     } else if (fullMode) {
-                        // 全键盘打字时它就是个空格键，上屏候选或补空格；发送走右下角那颗
-                        v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-                        fullSpace();
+                        // 全键盘里空格键也跟后台设置走：设成发送就点击发送，
+                        // 设成空格才继续走补空格/选候选；不会在语音结束后自动发送。
+                        if (!isSpaceMode() && composing.length() == 0) {
+                            if (editorHasText()) {
+                                v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+                                performSend();
+                            } else {
+                                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                            }
+                        } else {
+                            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                            fullSpace();
+                        }
                     } else if (editorHasText()) {
-                        // 字已经打完了：点一下就发送
-                        v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-                        performSend();
+                        // 字已经有了：按设置决定点一下是补空格还是直接发送
+                        if (isSpaceMode()) {
+                            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                            insertSpace();
+                        } else {
+                            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+                            performSend();
+                        }
                     } else {
                         // 什么都没有的时候不出空格，提示一下按住的用法
                         v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
@@ -431,16 +474,33 @@ public class MinimalVoiceIME extends InputMethodService {
         if (tvStatus == null || btnVoice == null) return;
         if (recording) return;
         String label;
-        if (fullMode) {
-            label = "空格";
+        if (lastVoiceDoneAt > 0) {
+            // 刚说完这一句，按钮马上切成“单击动作，长按继续说话”。
+            label = getString(isSpaceMode()
+                    ? R.string.voice_tap_space_hold : R.string.voice_tap_send_hold);
+        } else if (fullMode && !editorHasText()) {
+            label = "按住说话";
         } else if (editorHasText()) {
-            label = "发送";
+            // 输入框里已经有字，单击就按后台设置执行空格或发送；长按仍然是说话。
+            label = getString(isSpaceMode() ? R.string.voice_tap_space : R.string.voice_tap_send);
         } else {
             label = "按住说话";
         }
         if (!label.contentEquals(tvStatus.getText())) tvStatus.setText(label);
-        if (ivMic != null) ivMic.setVisibility(("按住说话".equals(label) && !fullMode)
-                ? View.VISIBLE : View.GONE);
+        // 说完之后文案变长，字号收小一点，保证一行完整显示；
+        // 麦克风只在默认“按住说话”时出现，进入发送/空格状态就收掉。
+        boolean justDone = lastVoiceDoneAt > 0;
+        tvStatus.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, justDone ? 11 : 14);
+        if (ivMic != null) ivMic.setVisibility(
+                (!justDone && "按住说话".equals(label) && !fullMode) ? View.VISIBLE : View.GONE);
+        if (btnFullLang != null) btnFullLang.setVisibility(fullMode ? View.VISIBLE : View.GONE);
+        if (btnDelete != null) btnDelete.setVisibility(fullMode ? View.GONE : View.VISIBLE);
+        updateFullLangLabel();
+    }
+
+    private void updateFullLangLabel() {
+        if (btnFullLang == null) return;
+        btnFullLang.setText(pinyinMode ? "中" : "英");
     }
 
     private Handler deleteHandler;
@@ -471,14 +531,49 @@ public class MinimalVoiceIME extends InputMethodService {
         });
     }
 
-    /** 删一次：有拼音串就退字母，没有才真的删输入框里的字。 */
+    /** 删一次：有拼音串就退字母；有语音整理中的下划线文字就自己删；都没有才删输入框里的字。 */
     private void deleteOneStep() {
         if (composing.length() > 0) {
             fullDelete();
-        } else {
-            deleteOnce();
+            updateVoiceBar();
+            return;
         }
+        if (!voiceComposing.isEmpty()) {
+            String rest = voiceComposing.substring(0,
+                    voiceComposing.offsetByCodePoints(voiceComposing.length(), -1));
+            voiceComposing = rest;
+            InputConnection ic = getCurrentInputConnection();
+            if (ic != null) {
+                if (rest.isEmpty()) {
+                    ic.setComposingText("", 1);
+                    ic.finishComposingText();
+                    hasComposing = false;
+                } else {
+                    ic.setComposingText(rest, 1);
+                }
+            }
+            updateVoiceBar();
+            return;
+        }
+        deleteOnce();
         updateVoiceBar();
+    }
+
+    /** 把还挂在输入框里的语音文字收尾，别留一段删不掉的下划线。 */
+    private void settleComposing() {
+        if (voiceComposing.isEmpty()) return;
+        String t = voiceComposing;
+        voiceComposing = "";
+        InputConnection ic = getCurrentInputConnection();
+        if (ic != null) {
+            if (t.isEmpty()) {
+                ic.setComposingText("", 1);
+            } else {
+                ic.setComposingText(t, 1);
+            }
+            ic.finishComposingText();
+        }
+        hasComposing = false;
     }
 
     private void startRepeatDelete() {
@@ -527,6 +622,8 @@ public class MinimalVoiceIME extends InputMethodService {
         InputConnection ic = getCurrentInputConnection();
         if (ic == null) return;
         ic.commitText(" ", 1);
+        lastVoiceDoneAt = 0;
+        updateVoiceBar();
         vibrate(8);
     }
 
@@ -550,6 +647,7 @@ public class MinimalVoiceIME extends InputMethodService {
         }
 
         lastVoiceDoneAt = 0;
+        updateVoiceBar();
         refreshStatus(getString(R.string.voice_hint));
         // 发送后不再自己弹键盘。App 收键盘是它自己的行为，硬弹回来只会造成收起又展开。
     }
@@ -670,6 +768,7 @@ public class MinimalVoiceIME extends InputMethodService {
         if (ivModeIcon != null) {
             ivModeIcon.setVisibility(full ? View.VISIBLE : View.GONE);
         }
+        updateVoiceBar();
     }
 
     /** 数字行：1 到 0 一排，每个键右上角挂一个常用标点，往上滑就打标点。 */
@@ -801,11 +900,12 @@ public class MinimalVoiceIME extends InputMethodService {
 
     private void addDigitRow() {
         LinearLayout row = newRow(40);
+        String[] puncts = {"!", "@", "#", "$", "%", "^", "&", "*", "(", ")"};
         for (int i = 1; i <= 9; i++) {
             row.addView(mkKey(String.valueOf(i), 1f, 14, false, null,
-                    onLetterRunnable(String.valueOf(i)), null));
+                    onLetterRunnable(String.valueOf(i)), puncts[i - 1]));
         }
-        row.addView(mkKey("0", 1f, 14, false, null, onLetterRunnable("0"), null));
+        row.addView(mkKey("0", 1f, 14, false, null, onLetterRunnable("0"), puncts[9]));
         llFullRows.addView(row);
     }
 
@@ -823,24 +923,34 @@ public class MinimalVoiceIME extends InputMethodService {
     /** 最后一排：左边大小写切换，中间 z 到 m，右边中英切换。退格和下面那条重复，不再放。 */
     private void addLastRow() {
         LinearLayout row = newRow(50);
-        row.addView(mkKey(shiftOn ? "⇧" : "⇧", 1.1f, 15, false, null, () -> {
+        View shift = mkKey(shiftOn ? "⇪" : "⇧", 1.1f, 15, false, null, () -> {
             shiftOn = !shiftOn;
+            if (shiftOn) pinyinMode = false;
             rebuildFullRows();
-        }, null));
+            updateFullLangLabel();
+        }, null);
+        if (shiftOn) {
+            TextView st = shift.findViewById(R.id.tv_key);
+            if (st != null) st.setTextColor(uiCtx.getColor(R.color.accent));
+        }
+        row.addView(shift);
         String[] mid = {"z", "x", "c", "v", "b", "n", "m"};
-        for (String k : mid) {
-            final String letter = k;
+        String[] midPuncts = {"~", "《", "》", "<", ">", "_", "$"};
+        for (int i = 0; i < mid.length; i++) {
+            final String letter = mid[i];
             boolean upper = shiftOn && !pinyinMode;
             row.addView(mkKey(upper ? letter.toUpperCase() : letter, 1f, 17, true,
-                    () -> onShiftLetter(letter), () -> onShiftLetter(letter), null));
+                    null, () -> onShiftLetter(letter), midPuncts[i]));
         }
-        row.addView(mkKey(pinyinMode ? "中" : "英", 1.1f, 14, false, null, () -> {
-            pinyinMode = !pinyinMode;
-            shiftOn = false;
-            clearComposing();
-            rebuildFullRows();
-            refreshCand();
-        }, null));
+        // M 右边这一格放删除，长按可以连续删
+        View del = mkKey("删除", 1.1f, 12, false, null, () -> {
+            deleteOneStep();
+            if (llFullRows != null) llFullRows.performHapticFeedback(
+                    HapticFeedbackConstants.KEYBOARD_TAP);
+        }, null);
+        KeySpec ds = (KeySpec) del.getTag();
+        if (ds != null) ds.repeatDelete = true;
+        row.addView(del);
         llFullRows.addView(row);
     }
 
@@ -886,6 +996,8 @@ public class MinimalVoiceIME extends InputMethodService {
         spec.longAction = (longPressUppercase && longAction != null && !pinyinMode)
                 ? longAction : null;
         spec.punct = punct;
+        spec.upper = longPressUppercase ? label.toUpperCase() : null;
+        spec.showLongPopup = longPressUppercase && punct != null && !punct.isEmpty();
         box.setTag(spec);
         return box;
     }
@@ -895,24 +1007,31 @@ public class MinimalVoiceIME extends InputMethodService {
         Runnable action;
         Runnable longAction;
         String punct;
+        String upper;
+        boolean showLongPopup;
+        boolean repeatDelete;
     }
 
     /** 一整块键盘收触摸：按歪了吸到最近的键，手指滑过去能换键，抬起才上屏。 */
     private void installFullKeyTouch() {
         if (llFullRows == null) return;
         final View[] pressed = {null};
+        final View[] startKey = {null};
         final Runnable[] longTask = {null};
         final boolean[] longFired = {false};
         final float[] downRawY = {0f};
+        final float[] downRawX = {0f};
 
         llFullRows.setOnTouchListener((v, e) -> {
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN: {
                     View k = keyAt(e.getX(), e.getY());
                     pressed[0] = k;
+                    startKey[0] = k;
                     longFired[0] = false;
                     longTask[0] = null;
                     downRawY[0] = e.getRawY();
+                    downRawX[0] = e.getRawX();
                     if (k != null) {
                         pressKey(k);
                         scheduleLong(k, longTask, longFired);
@@ -920,10 +1039,15 @@ public class MinimalVoiceIME extends InputMethodService {
                     return true;
                 }
                 case MotionEvent.ACTION_MOVE: {
+                    if (longFired[0]) {
+                        updateKeyPopupSelection(e.getRawY());
+                        return true;
+                    }
                     View k = keyAt(e.getX(), e.getY());
                     if (k != pressed[0]) {
                         if (longTask[0] != null) main.removeCallbacks(longTask[0]);
                         longTask[0] = null;
+                        if (longFired[0]) stopRepeatDelete();
                         longFired[0] = false;
                         if (pressed[0] != null) releaseKey(pressed[0]);
                         pressed[0] = k;
@@ -937,14 +1061,24 @@ public class MinimalVoiceIME extends InputMethodService {
                 }
                 case MotionEvent.ACTION_UP: {
                     if (longTask[0] != null) main.removeCallbacks(longTask[0]);
+                    stopRepeatDelete();
                     View k = pressed[0];
+                    View downKey = startKey[0];
                     pressed[0] = null;
+                    startKey[0] = null;
                     if (k != null) releaseKey(k);
-                    if (k == null || longFired[0]) return true;
-                    KeySpec spec = (KeySpec) k.getTag();
+                    if (downKey != null && downKey != k) releaseKey(downKey);
+                    if (longFired[0]) {
+                        commitKeyPopup();
+                        return true;
+                    }
+                    // 往上滑打符号时，以按下去的那颗键为准，别被中途经过的键带偏
+                    boolean mostlyVertical = Math.abs(e.getRawX() - downRawX[0]) < dp(22);
+                    View source = (mostlyVertical && downKey != null) ? downKey : k;
+                    if (source == null) return true;
+                    KeySpec spec = (KeySpec) source.getTag();
                     if (spec == null || spec.action == null) return true;
-                    k.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-                    // 手指从键面往上滑出一小段，就打右上角那个标点
+                    source.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                     if (spec.punct != null && !spec.punct.isEmpty()
                             && downRawY[0] - e.getRawY() > dp(10)) {
                         commitPunct(spec.punct);
@@ -955,14 +1089,119 @@ public class MinimalVoiceIME extends InputMethodService {
                 }
                 case MotionEvent.ACTION_CANCEL: {
                     if (longTask[0] != null) main.removeCallbacks(longTask[0]);
+                    stopRepeatDelete();
                     if (pressed[0] != null) releaseKey(pressed[0]);
+                    if (startKey[0] != null && startKey[0] != pressed[0]) releaseKey(startKey[0]);
                     pressed[0] = null;
+                    startKey[0] = null;
+                    dismissKeyPopup();
                     return true;
                 }
                 default:
                     return false;
             }
         });
+    }
+
+    private void showKeyPopup(View key, KeySpec spec) {
+        dismissKeyPopup();
+        keyPopupUpperText = spec.upper == null ? "" : spec.upper;
+        keyPopupSymbolText = spec.punct == null ? "" : spec.punct;
+        keyPopupSymbolSelected = false;
+
+        LinearLayout card = new LinearLayout(uiCtx);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackgroundResource(R.drawable.bg_card);
+        card.setPadding(dp(3), dp(3), dp(3), dp(3));
+        keyPopupUpper = popupOption(keyPopupUpperText);
+        keyPopupSymbol = popupOption(keyPopupSymbolText);
+        card.addView(keyPopupUpper, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(34)));
+        card.addView(keyPopupSymbol, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(34)));
+
+        int w = dp(66);
+        keyPopupHeightPx = dp(76);
+        keyPopup = new PopupWindow(card, w, keyPopupHeightPx, false);
+        keyPopup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        keyPopup.setOutsideTouchable(false);
+        keyPopup.setFocusable(false);
+        keyPopup.setElevation(dp(6));
+
+        int[] loc = new int[2];
+        key.getLocationOnScreen(loc);
+        keyPopupTopRaw = loc[1] - keyPopupHeightPx - dp(6);
+        keyPopupBottomRaw = loc[1] - dp(6);
+        keyPopup.showAsDropDown(key, (key.getWidth() - w) / 2,
+                -(keyPopupHeightPx + key.getHeight() + dp(6)));
+        renderKeyPopupSelection();
+    }
+
+    private TextView popupOption(String text) {
+        TextView tv = new TextView(uiCtx);
+        tv.setText(text);
+        tv.setTextSize(15);
+        tv.setGravity(Gravity.CENTER);
+        tv.setIncludeFontPadding(false);
+        tv.setTextColor(uiCtx.getColor(R.color.text_primary));
+        tv.setBackgroundResource(R.drawable.bg_chip_idle);
+        return tv;
+    }
+
+    private void updateKeyPopupSelection(float rawY) {
+        if (keyPopup == null) return;
+        // 手指还在键面上时默认大写；滑进弹窗后，上半区是大写，下半区是符号
+        boolean symbol = rawY <= keyPopupBottomRaw
+                && rawY >= keyPopupTopRaw + keyPopupHeightPx / 2f;
+        if (symbol != keyPopupSymbolSelected) {
+            keyPopupSymbolSelected = symbol;
+            renderKeyPopupSelection();
+            if (uiCtx != null) keyPopup.getContentView().performHapticFeedback(
+                    HapticFeedbackConstants.KEYBOARD_TAP);
+        }
+    }
+
+    private void renderKeyPopupSelection() {
+        if (keyPopupUpper == null || keyPopupSymbol == null) return;
+        keyPopupUpper.setBackgroundResource(
+                keyPopupSymbolSelected ? R.drawable.bg_chip_idle : R.drawable.bg_chip_active);
+        keyPopupUpper.setTextColor(uiCtx.getColor(
+                keyPopupSymbolSelected ? R.color.text_primary : R.color.on_accent));
+        keyPopupSymbol.setBackgroundResource(
+                keyPopupSymbolSelected ? R.drawable.bg_chip_active : R.drawable.bg_chip_idle);
+        keyPopupSymbol.setTextColor(uiCtx.getColor(
+                keyPopupSymbolSelected ? R.color.on_accent : R.color.text_primary));
+    }
+
+    private void commitKeyPopup() {
+        if (keyPopup == null) return;
+        boolean symbol = keyPopupSymbolSelected;
+        String upper = keyPopupUpperText;
+        String punct = keyPopupSymbolText;
+        dismissKeyPopup();
+        if (symbol) {
+            commitPunct(punct);
+        } else if (upper != null && !upper.isEmpty()) {
+            // 中文拼音状态下长大写，先切到英文，免得大写被拼进拼音串
+            if (pinyinMode) {
+                pinyinMode = false;
+                shiftOn = false;
+                clearComposing();
+                rebuildFullRows();
+                updateFullLangLabel();
+            }
+            onFullLetter(upper);
+        }
+    }
+
+    private void dismissKeyPopup() {
+        if (keyPopup != null) {
+            keyPopup.dismiss();
+            keyPopup = null;
+        }
+        keyPopupUpper = null;
+        keyPopupSymbol = null;
+        keyPopupSymbolSelected = false;
     }
 
     /** 触摸点落在哪个键上，行与键都是按坐标自己算，不依赖子控件的监听。 */
@@ -985,18 +1224,39 @@ public class MinimalVoiceIME extends InputMethodService {
     }
 
     private void pressKey(View k) {
+        k.setBackgroundResource(R.drawable.bg_key_pressed);
         k.animate().cancel();
         k.animate().scaleX(1.06f).scaleY(1.06f).alpha(0.86f).setDuration(45).start();
     }
 
     private void releaseKey(View k) {
+        k.setBackgroundResource(R.drawable.bg_btn);
         k.animate().cancel();
         k.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(70).start();
     }
 
     private void scheduleLong(final View k, Runnable[] holder, boolean[] fired) {
         KeySpec spec = (KeySpec) k.getTag();
-        if (spec == null || spec.longAction == null) return;
+        if (spec == null) return;
+        if (spec.repeatDelete) {
+            holder[0] = () -> {
+                fired[0] = true;
+                k.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                startRepeatDelete();
+            };
+            main.postDelayed(holder[0], 360);
+            return;
+        }
+        if (spec.showLongPopup) {
+            holder[0] = () -> {
+                fired[0] = true;
+                k.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                showKeyPopup(k, spec);
+            };
+            main.postDelayed(holder[0], 360);
+            return;
+        }
+        if (spec.longAction == null) return;
         holder[0] = () -> {
             fired[0] = true;
             k.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
@@ -1037,13 +1297,9 @@ public class MinimalVoiceIME extends InputMethodService {
         refreshCand();
     }
 
-    /** 字母键统一入口：英文打开了大写状态就先落一个大写字母，然后自动收回。 */
+    /** 字母键统一入口：大写开关打开后就一直保持，直到再点一下大小写键。 */
     private void onShiftLetter(String letter) {
         boolean upper = shiftOn && !pinyinMode;
-        if (upper) {
-            shiftOn = false;
-            rebuildFullRows();
-        }
         onFullLetter(upper ? letter.toUpperCase() : letter);
     }
 
@@ -1314,6 +1570,7 @@ public class MinimalVoiceIME extends InputMethodService {
         }
 
         AsrConfig config = AsrConfig.load(this);
+        Prefs.switchTokenModel(this, config.tokenIdentity(this));
         if (!config.isUsable()) {
             refreshStatus(getString(R.string.voice_need_setup));
             Toast.makeText(this, "请先在设置里填写语音识别接口地址", Toast.LENGTH_SHORT).show();
@@ -1338,10 +1595,15 @@ public class MinimalVoiceIME extends InputMethodService {
                 if (TextUtils.isEmpty(text)) return;
                 InputConnection ic = getCurrentInputConnection();
                 if (ic != null) {
+                    voiceComposing = text;
                     ic.setComposingText(text, 1);
                     hasComposing = true;
                 }
-                refreshStatus(getString(R.string.voice_live));
+                // 状态栏也显示当前中间稿，用户不用只靠输入框判断有没有在流式出字。
+                boolean stream = engine instanceof com.minivoice.ime.asr.RealtimeAsrEngine;
+                String live = (stream ? "流式输入：" : "识别中：") + (text.length() > 16
+                        ? text.substring(text.length() - 16) : text);
+                refreshStatus(live);
             }
 
             @Override
@@ -1359,7 +1621,10 @@ public class MinimalVoiceIME extends InputMethodService {
                 // 流式识别时输入框里已经挂着一段 composing 文本，
                 // 这里先把它替换成完整稿，整理完再替换一次，不会重复上屏。
                 InputConnection ic = getCurrentInputConnection();
-                if (ic != null) ic.setComposingText(raw, 1);
+                if (ic != null) {
+                    voiceComposing = raw;
+                    ic.setComposingText(raw, 1);
+                }
 
                 // 整理引擎按设置走：云端就联网，本地就用手机里的小模型，
                 // 本地模型没下好或者还没下，退回规则清理
@@ -1386,17 +1651,15 @@ public class MinimalVoiceIME extends InputMethodService {
         // 本地识别由系统自己开麦克风，不能再起外部录音器，否则两路抢麦
         if (engine.managesOwnAudio()) {
             recording = true;
+            voiceStartedAt = android.os.SystemClock.elapsedRealtime();
             refreshStatus(getString(R.string.voice_release));
             flashAccent(true);
             vibrate(30);
             return;
         }
 
-        boolean preferBt = Prefs.getBool(this, Prefs.K_PREFER_BT, true);
-        boolean bt = preferBt && BluetoothAudioRouter.hasBluetoothMic(this);
-        if (bt) {
-            BluetoothAudioRouter.enterSco(this);
-        }
+        // 蓝牙麦那套入口已经从设置里删了，统一用本机麦克风，避免 SCO 没建好录到一片静音
+        boolean bt = false;
 
         boolean ok = recorder.start(this, bt, new AudioRecorder.Listener() {
             @Override
@@ -1415,11 +1678,15 @@ public class MinimalVoiceIME extends InputMethodService {
 
         if (!ok) {
             if (bt) BluetoothAudioRouter.leaveSco(this);
+            Toast.makeText(this, "麦克风启动失败，检查一下录音权限", Toast.LENGTH_LONG).show();
+            flashAccent(false);
             return;
         }
 
         recording = true;
-        refreshStatus(getString(R.string.voice_release));
+        voiceStartedAt = android.os.SystemClock.elapsedRealtime();
+        refreshStatus(engine instanceof com.minivoice.ime.asr.RealtimeAsrEngine
+                ? "按住说话，流式输入" : getString(R.string.voice_release));
         flashAccent(true);
         vibrate(30);
     }
@@ -1461,7 +1728,11 @@ public class MinimalVoiceIME extends InputMethodService {
         if (engine != null) {
             engine.finish();
         }
-        armWaitTimeout();
+        long recordedMs = voiceStartedAt > 0
+                ? android.os.SystemClock.elapsedRealtime() - voiceStartedAt : 0;
+        // 长录音要走分段上传，20 秒固定超时会把还在转写的请求掐掉。
+        long waitMs = Math.max(WAIT_TIMEOUT_MS, Math.min(90000L, recordedMs * 2 + 15000L));
+        armWaitTimeout(waitMs);
     }
 
     public void cancelVoice() {
@@ -1475,6 +1746,7 @@ public class MinimalVoiceIME extends InputMethodService {
             }
             hasComposing = false;
         }
+        voiceComposing = "";
         recorder.stop();
         BluetoothAudioRouter.leaveSco(this);
         if (engine != null) {
@@ -1495,8 +1767,13 @@ public class MinimalVoiceIME extends InputMethodService {
             return new LocalAsrEngine(this);
         }
         if (AsrConfig.PROTOCOL_BAILIAN.equals(config.protocol)) {
-            // 优先走流式，边说边出字；连不上会自动退回整段上传
-            return new RealtimeAsrEngine(config, this);
+            // 百炼默认走实时流式，边说边出字；WebSocket 建不起来时引擎会自己
+            // 退回整段上传，所以不需要为了“怕失败”把默认模型改成一次性。
+            if (AsrConfig.isBailianEndpoint(config.endpoint)) {
+                return new RealtimeAsrEngine(config, this);
+            }
+            // 小米、智谱等其它兼容平台暂不支持这家的实时协议，走整段识别。
+            return new BailianAsrEngine(config, this);
         }
         if (AsrConfig.PROTOCOL_WS.equals(config.protocol)) {
             return new WsAsrEngine(config);
@@ -1507,22 +1784,16 @@ public class MinimalVoiceIME extends InputMethodService {
     /** 过滤语气词、套用标点偏好。 */
     private String clean(String text) {
         String out = text.trim();
-        for (String filler : Prefs.getFillerList(this)) {
-            out = out.replace(filler, "");
-        }
-        String punctRule = Prefs.getString(this, Prefs.K_PUNCT, "");
-        if ("全角".equals(punctRule)) {
-            out = out.replace(',', '，').replace('.', '。').replace('?', '？')
-                    .replace('!', '！').replace(':', '：');
-        }
+        // 原来的语气词替换（默认表里带「就是」）会把「就是说」切成「说」，已经去掉，不再做这种盲删。
         return TermFix.apply(this, TextPolisher.tidy(out));
     }
 
     /** 发出去之后最多等 20 秒，超时就复位，别一直挂着“识别中”。 */
-    private void armWaitTimeout() {
+    private void armWaitTimeout(long timeoutMs) {
         main.postDelayed(() -> {
             if (!waiting) return;
             waiting = false;
+            settleComposing();
             showBusy(false);
             refreshStatus("识别超时了，再按住说一次");
             flashAccent(false);
@@ -1530,7 +1801,7 @@ public class MinimalVoiceIME extends InputMethodService {
                 engine.cancel();
                 engine = null;
             }
-        }, WAIT_TIMEOUT_MS);
+        }, timeoutMs);
     }
 
     private void refreshStatus(String text) {
@@ -1686,10 +1957,10 @@ public class MinimalVoiceIME extends InputMethodService {
             c.finishComposingText();
         }
         hasComposing = false;
-        refreshStatus(isSpaceMode() ? getString(R.string.voice_tap_space)
-                : getString(R.string.voice_tap_send));
-        flashAccent(false);
+        voiceComposing = "";
         lastVoiceDoneAt = SystemClock.uptimeMillis();
+        updateVoiceBar();
+        flashAccent(false);
         flashDone();
     }
 

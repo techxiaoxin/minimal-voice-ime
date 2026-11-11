@@ -10,15 +10,19 @@ import java.io.File;
 public final class LlmPolisher {
 
     private static final String DEFAULT_SYSTEM =
-            "把下面这句话改顺，像用户自己打出来的。去掉口水词和重复，修同音错字，补标点。"
-                    + "\n意思、信息点、语气都不能丢，不许扩写、总结、分条、加前缀，长度和原文差不多。"
-                    + "\n英文和型号照原样写，比如 iPhone、WiFi、Type-C。只输出这一句。";
+            "帮我整理这段语音转文字：只删语气词和重复，有实际意思的词都保留，不改说法、不压短，"
+                    + "只改错别字和标点，需要时按内容分段。只输出正文。";
 
     private static volatile boolean tried = false;
     private static volatile String loadedPath = null;
 
     /** 设置页里看到的提示词：用户改过就用改过的。 */
     public static String rulesText(Context ctx) {
+        if (!Prefs.getBool(ctx, "polish_rule_local_reset_v50", false)) {
+            Prefs.putString(ctx, Prefs.K_PROMPT_LOCAL, DEFAULT_SYSTEM);
+            Prefs.putBool(ctx, "polish_rule_local_reset_v50", true);
+            return DEFAULT_SYSTEM;
+        }
         String custom = Prefs.getString(ctx, Prefs.K_PROMPT_LOCAL, "");
         return custom == null || custom.trim().isEmpty() ? DEFAULT_SYSTEM : custom;
     }
@@ -53,10 +57,37 @@ public final class LlmPolisher {
     public static String polish(Context ctx, String raw) {
         if (raw == null || raw.trim().isEmpty()) return raw;
         if (!ensureLoaded(ctx)) return "";
-        int maxTokens = Math.max(48, Math.min(256, raw.length() * 3 + 24));
-        String out = LocalLlm.generate(rulesText(ctx), raw, maxTokens);
-        out = clean(out, raw);
+        int maxTokens = Math.max(64, Math.min(512, raw.length() * 3 + 48));
+
+        // 小模型吃不动太复杂的长指令，把要求写进用户消息里，再用一句话兜一次。
+        String ask = "把下面这段话整理成通顺的书面语：去掉语气词和重复，补上标点，不要总结、不要删有实际意思的词。只输出整理后的正文：\n" + raw;
+        String out = clean(LocalLlm.generate(rulesText(ctx), ask, maxTokens), raw);
+
+        // 没吐东西，或者基本就是把原文复读一遍，说明这轮没干活，换更直白的说法再来一次
+        if (!worked(out, raw)) {
+            String ask2 = "整理下面这句话：删掉嗯啊呃这类语气词和重复的词，补上标点。只输出整理后的正文：\n" + raw;
+            out = clean(LocalLlm.generate("你是中文文字整理助手。", ask2, maxTokens), raw);
+        }
+        // 两次都没干活就当失败，交给上层的规则清理兜底
+        if (!worked(out, raw)) return "";
         return out;
+    }
+
+    /** 判断这次到底有没有整理：空结果、和原文一模一样、还是那副没标点的样子，都算没干活。 */
+    private static boolean worked(String out, String raw) {
+        if (out == null || out.trim().isEmpty()) return false;
+        String a = raw.trim();
+        String b = out.trim();
+        if (a.equals(b)) return false;
+        if (b.length() >= 8 && !hasPunct(b) && !hasPunct(a)) return false;
+        return true;
+    }
+
+    private static boolean hasPunct(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            if ("，。？！；：、".indexOf(s.charAt(i)) >= 0) return true;
+        }
+        return false;
     }
 
     private static String clean(String text, String raw) {

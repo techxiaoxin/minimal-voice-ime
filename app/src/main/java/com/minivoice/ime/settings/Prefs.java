@@ -26,8 +26,6 @@ public final class Prefs {
     public static final String K_PREFER_BT = "prefer_bluetooth_mic";
     public static final String K_DEVICE_NAME = "device_name";
     public static final String K_VOCAB = "custom_vocab";
-    public static final String K_PUNCT = "punctuation_rule";
-    public static final String K_FILTER = "filler_filter";
     public static final String K_SYNC_PENDING = "sync_pending";
     /** 记录内置 Key 与域名的版本，用来判断要不要刷掉本机的旧配置。 */
     public static final String K_BUILTIN_VER = "builtin_ver";
@@ -38,11 +36,19 @@ public final class Prefs {
     public static final String K_PROMPT_CLOUD = "polish_prompt_cloud";
     /** 云端 AI 整理用的文本模型，用户可以在设置页自己换。 */
     public static final String K_POLISH_MODEL = "polish_model";
+    /** 用户点过恢复默认把 Key 清空了，读配置时别再偷偷塞回内置 Key。 */
+    public static final String K_KEY_CLEARED = "key_cleared";
+    /** 整理单独用一套地址和 Key，留空就沿用识别那套。 */
+    public static final String K_POLISH_ENDPOINT = "polish_endpoint";
+    public static final String K_POLISH_KEY = "polish_key";
     public static final String K_PROMPT_LOCAL = "polish_prompt_local";
     /** 本地整理模型的下载地址，留空用预设。 */
     public static final String K_LLM_URL = "llm_url";
-    /** 本地整理模型档位：small 0.5B / big 1.5B。 */
+    /** 本地整理模型档位：small 0.5B / big 1.5B / custom 自定义。 */
     public static final String K_LLM_TIER = "llm_tier";
+    /** 自定义模型的文件名和体积，下载完记下来。 */
+    public static final String K_LLM_CUSTOM_NAME = "llm_custom_name";
+    public static final String K_LLM_CUSTOM_SIZE = "llm_custom_size";
     /** 云端整理累计用量。 */
     public static final String K_TOKEN_TOTAL = "polish_tokens";
     public static final String K_TOKEN_QUESTS = "polish_requests";
@@ -84,6 +90,14 @@ public final class Prefs {
         sp(ctx).edit().putBoolean(key, value).apply();
     }
 
+    public static long getLong(Context ctx, String key, long def) {
+        return sp(ctx).getLong(key, def);
+    }
+
+    public static void putLong(Context ctx, String key, long value) {
+        sp(ctx).edit().putLong(key, value).apply();
+    }
+
     /** 自定义词表：一行一个词，同步时按 JSON 传。 */
     public static int getInt(Context ctx, String key, int def) {
         return sp(ctx).getInt(key, def);
@@ -95,6 +109,8 @@ public final class Prefs {
 
     /** 累加一次云端整理用掉的 token，顺便记次数。 */
     public static final String K_TOKEN_LOG = "token_log";
+    /** 当前这套用量记录属于哪个模型；换模型时整套切换。 */
+    public static final String K_TOKEN_MODEL = "token_model_id";
     /** 识别和整理分别累计，两边走的是不同模型，混在一起没法跟控制台对。 */
     public static final String K_TOKEN_ASR = "token_asr_sum";
     public static final String K_TOKEN_POLISH = "token_polish_sum";
@@ -107,7 +123,10 @@ public final class Prefs {
     public static void addTokens(Context ctx, int tokens, String kind) {
         int n = Math.max(0, tokens);
         putInt(ctx, K_TOKEN_TOTAL, getInt(ctx, K_TOKEN_TOTAL, 0) + n);
-        putInt(ctx, K_TOKEN_QUESTS, getInt(ctx, K_TOKEN_QUESTS, 0) + 1);
+        // 一次说话只算一组：识别时 +1，紧接着的整理不再 +1。
+        if (!"整理".equals(kind)) {
+            putInt(ctx, K_TOKEN_QUESTS, getInt(ctx, K_TOKEN_QUESTS, 0) + 1);
+        }
         if ("整理".equals(kind)) {
             putInt(ctx, K_TOKEN_POLISH, getInt(ctx, K_TOKEN_POLISH, 0) + n);
         } else {
@@ -180,6 +199,52 @@ public final class Prefs {
         }
     }
 
+    /** 切到某个模型的用量记录：先存旧的，再读新的；同一个模型重复调用不动。 */
+    public static void switchTokenModel(Context ctx, String identity) {
+        if (identity == null || identity.trim().isEmpty()) return;
+        String id = identity.trim();
+        String current = getString(ctx, K_TOKEN_MODEL, "");
+        if (id.equals(current)) return;
+        if (current.isEmpty()) {
+            // 首次升级没有归属，就把现有记录认作当前模型，不能平白清掉。
+            putString(ctx, K_TOKEN_MODEL, id);
+            return;
+        }
+        saveTokenState(ctx, current);
+        loadTokenState(ctx, id);
+        putString(ctx, K_TOKEN_MODEL, id);
+    }
+
+    private static String tokenKey(String identity) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+            byte[] d = md.digest(identity.getBytes("UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < 10; i++) sb.append(String.format("%02x", d[i]));
+            return sb.toString();
+        } catch (Exception e) {
+            return Integer.toHexString(identity.hashCode());
+        }
+    }
+
+    private static void saveTokenState(Context ctx, String identity) {
+        String k = "token_saved_" + tokenKey(identity) + "_";
+        putString(ctx, k + "log", getString(ctx, K_TOKEN_LOG, ""));
+        putInt(ctx, k + "total", getInt(ctx, K_TOKEN_TOTAL, 0));
+        putInt(ctx, k + "quests", getInt(ctx, K_TOKEN_QUESTS, 0));
+        putInt(ctx, k + "asr", getInt(ctx, K_TOKEN_ASR, 0));
+        putInt(ctx, k + "polish", getInt(ctx, K_TOKEN_POLISH, 0));
+    }
+
+    private static void loadTokenState(Context ctx, String identity) {
+        String k = "token_saved_" + tokenKey(identity) + "_";
+        putString(ctx, K_TOKEN_LOG, getString(ctx, k + "log", ""));
+        putInt(ctx, K_TOKEN_TOTAL, getInt(ctx, k + "total", 0));
+        putInt(ctx, K_TOKEN_QUESTS, getInt(ctx, k + "quests", 0));
+        putInt(ctx, K_TOKEN_ASR, getInt(ctx, k + "asr", 0));
+        putInt(ctx, K_TOKEN_POLISH, getInt(ctx, k + "polish", 0));
+    }
+
     public static void resetLog(Context ctx) {
         putString(ctx, K_TOKEN_LOG, "");
     }
@@ -205,23 +270,10 @@ public final class Prefs {
         putString(ctx, K_VOCAB, String.join("\n", words));
     }
 
-    /** 语气词过滤表，逗号或换行分隔。 */
-    public static List<String> getFillerList(Context ctx) {
-        String raw = getString(ctx, K_FILTER, "嗯,呃,啊,那个,就是");
-        List<String> out = new ArrayList<>();
-        for (String t : raw.split("[,\n，]")) {
-            String s = t.trim();
-            if (!s.isEmpty()) out.add(s);
-        }
-        return out;
-    }
-
     public static Map<String, String> exportSyncPayload(Context ctx) {
         Map<String, String> map = new LinkedHashMap<>();
         map.put("device", getString(ctx, K_DEVICE_NAME, android.os.Build.MODEL));
         map.put("vocab", GSON.toJson(getWordList(ctx)));
-        map.put("punct", getString(ctx, K_PUNCT, ""));
-        map.put("filter", getString(ctx, K_FILTER, ""));
         return map;
     }
 
@@ -233,8 +285,6 @@ public final class Prefs {
             }.getType());
             if (words != null) setWordList(ctx, words);
         }
-        if (map.get("punct") != null) putString(ctx, K_PUNCT, map.get("punct"));
-        if (map.get("filter") != null) putString(ctx, K_FILTER, map.get("filter"));
     }
 
     /** 离线期间是否攒了未同步的偏好变更。 */

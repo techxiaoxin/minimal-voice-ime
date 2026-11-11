@@ -6,6 +6,13 @@
     android:background="@color/panel_bg"
     android:padding="28dp">
 
+    <ImageView
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:layout_marginBottom="14dp"
+        android:contentDescription="@string/app_name"
+        android:src="@drawable/ic_brand" />
+
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

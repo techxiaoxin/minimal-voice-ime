@@ -28,11 +28,6 @@ public class RealtimeAsrEngine implements AsrEngine {
 
     private static final String TAG = "RealtimeAsr";
 
-    /** OpenAI Realtime 风格的会话地址，模型放在 query 里。 */
-    public static final String URL =
-            "wss://private-space.example.com/api-ws/v1/realtime"
-                    + "?model=" + AsrConfig.STREAM_MODEL;
-
     /** 一次发 100 毫秒的音频，16k 16bit 单声道就是 3200 字节。 */
     private static final int CHUNK_BYTES = 3200;
     private static final long FINISH_TIMEOUT_MS = 12000L;
@@ -53,6 +48,18 @@ public class RealtimeAsrEngine implements AsrEngine {
     private volatile boolean cancelled;
     private volatile boolean finishing;
     private volatile boolean gotFinal;
+    private volatile boolean fallbackStarted;
+    private volatile boolean wsFailed;
+    private volatile String wsFailReason = "";
+    private volatile boolean sessionSent;
+    /** 3.0/3.1 实时模型发的是 delta，3-asr 发的是 text，两种都要能拼出中间稿。 */
+    private volatile String partialSoFar = "";
+    /** qwen-audio 实时模型不接受 turn_detection:none，只能开 VAD，收尾时补静音。 */
+    private volatile boolean vadMode;
+    private final StringBuilder committedText = new StringBuilder();
+    /** 给设置页“识别诊断”看的精简日志，只记事件和错误，不记音频和 Key。 */
+    private final StringBuilder diag = new StringBuilder();
+    private int partialCount;
 
     /** 全部原始音频，WebSocket 挂掉时还能退回整段上传。 */
     private final ByteArrayOutputStream all = new ByteArrayOutputStream();
@@ -80,6 +87,18 @@ public class RealtimeAsrEngine implements AsrEngine {
         ready = false;
         finishing = false;
         gotFinal = false;
+        fallbackStarted = false;
+        wsFailed = false;
+        wsFailReason = "";
+        sessionSent = false;
+        partialSoFar = "";
+        // 全部实时模型都开 server_vad：qwen3 在 none 模式下要等 commit 才吐字，
+        // 录音中途看不到中间稿；开 VAD 后服务端才会边说边回。
+        vadMode = true;
+        committedText.setLength(0);
+        partialCount = 0;
+        synchronized (diag) { diag.setLength(0); }
+        logDiag("START model=" + config.streamModel() + " host=" + hostOfEndpoint());
         synchronized (all) {
             all.reset();
         }
@@ -97,7 +116,7 @@ public class RealtimeAsrEngine implements AsrEngine {
         }
 
         Request request = new Request.Builder()
-                .url(URL)
+                .url(config.streamEndpoint())
                 .addHeader("Authorization", "Bearer " + config.apiKey)
                 .build();
         socket = client.newWebSocket(request, new WsListener());
@@ -109,6 +128,9 @@ public class RealtimeAsrEngine implements AsrEngine {
         synchronized (all) {
             all.write(pcm, 0, length);
         }
+        // WebSocket 已经废了，录音继续攒着，等松手后再整段上传，
+        // 不能在这里立刻发 HTTP，那时候只有开头几十毫秒音频。
+        if (wsFailed) return;
         if (!ready) {
             synchronized (pending) {
                 pending.write(pcm, 0, length);
@@ -116,6 +138,25 @@ public class RealtimeAsrEngine implements AsrEngine {
             return;
         }
         appendAudio(pcm, length);
+    }
+
+    private void markReady() {
+        if (ready || cancelled) return;
+        ready = true;
+        synchronized (pending) {
+            if (pending.size() > 0) {
+                byte[] p = pending.toByteArray();
+                pending.reset();
+                synchronized (chunk) {
+                    chunk.write(p, 0, p.length);
+                    if (chunk.size() >= CHUNK_BYTES) {
+                        sendAudio(chunk.toByteArray());
+                        chunk.reset();
+                    }
+                }
+            }
+        }
+        if (finishRequested) flushAndCommit();
     }
 
     private void appendAudio(byte[] pcm, int length) {
@@ -133,6 +174,10 @@ public class RealtimeAsrEngine implements AsrEngine {
     public void finish() {
         finishing = true;
         finishRequested = true;
+        if (wsFailed) {
+            fallback(wsFailReason);
+            return;
+        }
         if (!ready) {
             // 会话还在建，等 session.updated 回来再收尾
             armFinishTimeout();
@@ -141,8 +186,8 @@ public class RealtimeAsrEngine implements AsrEngine {
         flushAndCommit();
     }
 
-    /** 把攒下的音频全发完，再 commit 一次收尾。 */
-    private void flushAndCommit() {
+    /** 把攒下的音频全发完。 */
+    private void flushPendingAudio() {
         synchronized (pending) {
             if (pending.size() > 0) {
                 byte[] p = pending.toByteArray();
@@ -158,6 +203,13 @@ public class RealtimeAsrEngine implements AsrEngine {
                 chunk.reset();
             }
         }
+    }
+
+    /** 把攒下的音频全发完，再按会话模式收尾。 */
+    private void flushAndCommit() {
+        logDiag("FINISH bytes=" + all.size());
+        flushPendingAudio();
+        // 和 0.6.10 一致，commit 一次收尾；服务端默认 VAD 会正常给 completed。
         sendJson("{\"type\":\"input_audio_buffer.commit\"}");
         armFinishTimeout();
     }
@@ -178,11 +230,9 @@ public class RealtimeAsrEngine implements AsrEngine {
         clearFinishTimeout();
         finishTimeout = () -> {
             if (cancelled || gotFinal) return;
-            emitError("识别超时了，再说一次");
-            if (socket != null) {
-                socket.close(1000, "timeout");
-                socket = null;
-            }
+            // 实时没返回最终稿也别直接报错，拿完整录音走整段识别兜底。
+            Log.w(TAG, "stream finish timeout, fallback");
+            fallback("finish timeout");
         };
         main.postDelayed(finishTimeout, FINISH_TIMEOUT_MS);
     }
@@ -204,12 +254,38 @@ public class RealtimeAsrEngine implements AsrEngine {
         socket.send(o.toString());
     }
 
-    /** 流式返回里带 usage 就累加，设置页的云端用量才不会一直停在 0。 */
-    private void recordUsage(JsonObject j) {
-        if (appCtx == null || !j.has("usage") || !j.get("usage").isJsonObject()) return;
-        JsonObject u = j.getAsJsonObject("usage");
-        if (u.has("total_tokens") && !u.get("total_tokens").isJsonNull()) {
-            com.minivoice.ime.settings.Prefs.addTokens(appCtx, u.get("total_tokens").getAsInt(), "识别");
+    /** 流式返回里带 usage 就累加；3.0/3.1 实时模型不返回 usage 时按识别文本估算，避免一直显示 0。 */
+    private void recordUsage(JsonObject j, String transcript) {
+        if (appCtx == null) return;
+        int tokens = 0;
+        if (j.has("usage") && j.get("usage").isJsonObject()) {
+            JsonObject u = j.getAsJsonObject("usage");
+            if (u.has("total_tokens") && !u.get("total_tokens").isJsonNull()) {
+                tokens = u.get("total_tokens").getAsInt();
+            }
+        }
+        if (tokens <= 0) {
+            tokens = Math.max(1, transcript == null ? 1 : transcript.length());
+        }
+        com.minivoice.ime.settings.Prefs.addTokens(appCtx, tokens, "识别");
+    }
+
+    private String hostOfEndpoint() {
+        try {
+            android.net.Uri u = android.net.Uri.parse(config.streamEndpoint());
+            return u.getHost() == null ? "?" : u.getHost();
+        } catch (Exception e) {
+            return "?";
+        }
+    }
+
+    private void logDiag(String line) {
+        if (appCtx == null) return;
+        synchronized (diag) {
+            long t = android.os.SystemClock.elapsedRealtime();
+            diag.append(t).append("  ").append(line).append('\n');
+            if (diag.length() > 6000) diag.delete(0, diag.length() - 6000);
+            com.minivoice.ime.settings.Prefs.putString(appCtx, "asr_diag", diag.toString());
         }
     }
 
@@ -219,19 +295,39 @@ public class RealtimeAsrEngine implements AsrEngine {
     }
 
     private void onOpenSendSession() {
-        // 手动 commit，不让服务端自己按静音断句，避免说到一半被切段
+        // 0.6.10 用的就是 null，服务端会落到默认 server_vad，能边录边出字；
+        // 显式写 server_vad 在部分模型上反而不回中间稿。null 兼容性最好。
+        String turn = "null";
         String session = "{\"type\":\"session.update\",\"session\":{"
                 + "\"input_audio_format\":\"pcm\","
-                + "\"input_audio_transcription\":{\"model\":\"" + AsrConfig.STREAM_MODEL + "\"},"
-                + "\"turn_detection\":null,"
+                + "\"input_audio_transcription\":{\"model\":\"" + config.streamModel() + "\"},"
+                + "\"turn_detection\":" + turn + ","
                 + "\"modalities\":[\"text\"]}}";
         sendJson(session);
     }
 
+    /** 兜底整段上传换成更快的兼容模型，别再用 qwen-audio 原生接口慢慢等。 */
+    private AsrConfig fallbackConfig() {
+        AsrConfig c = new AsrConfig();
+        c.endpoint = config.endpoint;
+        c.apiKey = config.apiKey;
+        c.protocol = config.protocol;
+        c.language = config.language;
+        c.model = AsrConfig.BAILIAN_BATCH_MODEL;
+        c.polish = config.polish;
+        return c;
+    }
+
     /** WebSocket 连不上或者中途断了，退回一次性整段上传，保证还能出字。 */
     private void fallback(String reason) {
-        if (cancelled || gotFinal) return;
+        if (cancelled || gotFinal || fallbackStarted) return;
+        fallbackStarted = true;
+        clearFinishTimeout();
         Log.w(TAG, "stream fallback: " + reason);
+        if (socket != null) {
+            socket.close(1000, "fallback");
+            socket = null;
+        }
         byte[] pcm;
         synchronized (all) {
             pcm = all.toByteArray();
@@ -240,7 +336,7 @@ public class RealtimeAsrEngine implements AsrEngine {
             emitError("说得太短了，按住多说一会儿");
             return;
         }
-        AsrEngine legacy = new BailianAsrEngine(config);
+        AsrEngine legacy = new BailianAsrEngine(fallbackConfig(), appCtx);
         legacy.start(new AsrEngine.Callback() {
             @Override
             public void onPartial(String text) {
@@ -267,7 +363,9 @@ public class RealtimeAsrEngine implements AsrEngine {
         @Override
         public void onOpen(WebSocket webSocket, Response response) {
             socket = webSocket;
-            onOpenSendSession();
+            logDiag("OPEN");
+            // 和 0.6.10 一样，等 session.created 之后再发 session.update，
+            // 太早发会被服务端丢掉，导致一直等不到 session.updated、录音期间不出字。
         }
 
         @Override
@@ -276,45 +374,65 @@ public class RealtimeAsrEngine implements AsrEngine {
                 JsonObject j = JsonParser.parseString(text).getAsJsonObject();
                 String type = j.has("type") ? j.get("type").getAsString() : "";
 
-                if ("session.updated".equals(type) || "session.created".equals(type)) {
-                    boolean first = !ready;
-                    ready = true;
-                    if (first) {
-                        // 把开会话之前攒的音频补上
-                        synchronized (pending) {
-                            if (pending.size() > 0) {
-                                byte[] p = pending.toByteArray();
-                                pending.reset();
-                                synchronized (chunk) {
-                                    chunk.write(p, 0, p.length);
-                                    if (chunk.size() >= CHUNK_BYTES) {
-                                        sendAudio(chunk.toByteArray());
-                                        chunk.reset();
-                                    }
-                                }
-                            }
-                        }
+                if ("session.created".equals(type)) {
+                    logDiag("SESSION_CREATED");
+                    if (!sessionSent) {
+                        sessionSent = true;
+                        onOpenSendSession();
                     }
-                    if (finishRequested) flushAndCommit();
+                    // 等 session.updated 真正应用配置后再送音频，和 0.6.10 的可用流程一致。
                     return;
                 }
-                if ("conversation.item.input_audio_transcription.text".equals(type)) {
+                if ("session.updated".equals(type)) {
+                    logDiag("SESSION_UPDATED ready");
+                    markReady();
+                    return;
+                }
+                if ("conversation.item.input_audio_transcription.text".equals(type)
+                        || "conversation.item.input_audio_transcription.delta".equals(type)) {
                     String confirmed = j.has("text") ? j.get("text").getAsString() : "";
                     String stash = j.has("stash") ? j.get("stash").getAsString() : "";
-                    String partial = (confirmed == null ? "" : confirmed)
-                            + (stash == null ? "" : stash);
-                    if (!TextUtils.isEmpty(partial)) emitPartial(partial);
+                    String partial;
+                    if (!TextUtils.isEmpty(stash)) {
+                        // 百炼把已确认文本放在 text、正在识别的尾巴放在 stash。
+                        partial = (confirmed == null ? "" : confirmed)
+                                + (stash == null ? "" : stash);
+                    } else if ("conversation.item.input_audio_transcription.delta".equals(type)
+                            && !TextUtils.isEmpty(confirmed)) {
+                        // 少数实时模型只发增量 delta，没有 stash，自己往下拼。
+                        partialSoFar = partialSoFar + confirmed;
+                        partial = partialSoFar;
+                    } else {
+                        partial = confirmed == null ? "" : confirmed;
+                    }
+                    if (!TextUtils.isEmpty(partial)) {
+                        partialSoFar = partial;
+                        if (partialCount++ % 5 == 0) logDiag("PARTIAL#" + partialCount + " " + partial);
+                        emitPartial(vadMode ? committedText + partial : partial);
+                    }
                     return;
                 }
                 if ("conversation.item.input_audio_transcription.completed".equals(type)) {
                     String transcript = j.has("transcript") ? j.get("transcript").getAsString() : "";
-                    recordUsage(j);
+                    logDiag("COMPLETED " + transcript + (j.has("usage") ? " usage=yes" : " usage=no"));
+                    recordUsage(j, transcript);
+                    // server_vad 会在用户停顿时自动断句。没松手之前的 completed
+                    // 只是半句，先攒起来，别提前把输入法收掉。
+                    if (vadMode && !finishRequested) {
+                        if (!TextUtils.isEmpty(transcript)) committedText.append(transcript);
+                        partialSoFar = committedText.toString();
+                        if (committedText.length() > 0) emitPartial(committedText.toString());
+                        return;
+                    }
+                    String full = vadMode
+                            ? committedText.toString() + (transcript == null ? "" : transcript)
+                            : transcript;
                     gotFinal = true;
                     clearFinishTimeout();
-                    if (TextUtils.isEmpty(transcript)) {
+                    if (TextUtils.isEmpty(full)) {
                         emitError("没识别出内容，再说一次");
                     } else {
-                        emitFinal(transcript);
+                        emitFinal(full);
                     }
                     return;
                 }
@@ -322,7 +440,17 @@ public class RealtimeAsrEngine implements AsrEngine {
                     JsonObject err = j.has("error") ? j.getAsJsonObject("error") : null;
                     String msg = err != null && err.has("message")
                             ? err.get("message").getAsString() : "流式识别出错";
-                    emitError("识别失败：" + msg);
+                    // 实时协议被服务端拒绝（模型、格式、权限都可能是参数错误）时，
+                    // 不要在录音中途用半截音频去重试；先记住失败，松手后整段上传。
+                    Log.w(TAG, "stream error: " + msg);
+                    logDiag("ERROR " + msg);
+                    wsFailed = true;
+                    wsFailReason = msg;
+                    if (socket != null) {
+                        socket.close(1000, "error");
+                        socket = null;
+                    }
+                    if (finishRequested && !gotFinal) fallback(msg);
                 }
             } catch (Exception e) {
                 Log.w(TAG, "解析事件失败", e);
@@ -332,7 +460,13 @@ public class RealtimeAsrEngine implements AsrEngine {
         @Override
         public void onFailure(WebSocket webSocket, Throwable t, Response response) {
             if (cancelled) return;
-            fallback(t == null ? "unknown" : t.getMessage());
+            wsFailed = true;
+            wsFailReason = t == null ? "unknown" : t.getMessage();
+            logDiag("FAILURE " + wsFailReason + " code=" + (response == null ? "?" : response.code()));
+            socket = null;
+            // 连接失败时用户可能还在说话；等松手后拿完整音频走整段识别，
+            // 中途就上传只会得到“说得太短”的提示。
+            if (finishRequested && !gotFinal) fallback(wsFailReason);
         }
     }
 

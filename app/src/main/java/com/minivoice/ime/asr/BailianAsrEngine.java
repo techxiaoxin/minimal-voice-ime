@@ -19,6 +19,7 @@ import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.MediaType;
+import okhttp3.MultipartBody;
 import okhttp3.OkHttpClient;
 import okhttp3.Protocol;
 import okhttp3.Request;
@@ -33,6 +34,8 @@ public class BailianAsrEngine implements AsrEngine {
 
     private static final String TAG = "BailianAsr";
     private static final int SAMPLE_RATE = 16000;
+    /** 单次最多上传 30 秒，长录音拆段，避免一个大请求超时或失败。 */
+    private static final int MAX_CHUNK_BYTES = 30 * SAMPLE_RATE * 2;
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 
     private final AsrConfig config;
@@ -90,7 +93,79 @@ public class BailianAsrEngine implements AsrEngine {
             emitError("说得太短了，按住多说一会儿");
             return;
         }
-        upload(buildWav(pcm));
+        if (pcm.length > MAX_CHUNK_BYTES) {
+            uploadChunks(pcm, 0, new StringBuilder());
+            return;
+        }
+        uploadWithRetry(buildWav(pcm), new UploadCallback() {
+            @Override
+            public void onText(String text) {
+                if (TextUtils.isEmpty(text)) emitError("没识别出内容，再说一次");
+                else emitFinal(text);
+            }
+
+            @Override
+            public void onError(String message) {
+                emitError(message);
+            }
+        }, 0);
+    }
+
+    /** 长录音按 30 秒切段，顺序识别后拼起来；一段失败不会让整段白录。 */
+    private void uploadChunks(byte[] pcm, int offset, StringBuilder joined) {
+        if (cancelled) return;
+        if (offset >= pcm.length) {
+            String text = joined.toString().trim();
+            if (TextUtils.isEmpty(text)) emitError("没识别出内容，再说一次");
+            else emitFinal(text);
+            return;
+        }
+        int end = Math.min(offset + MAX_CHUNK_BYTES, pcm.length);
+        byte[] part = new byte[end - offset];
+        System.arraycopy(pcm, offset, part, 0, part.length);
+        uploadWithRetry(buildWav(part), new UploadCallback() {
+            @Override
+            public void onText(String text) {
+                if (TextUtils.isEmpty(text)) {
+                    // 某一段没出字（比如纯静音），跳过继续，不要整段失败
+                    uploadChunks(pcm, end, joined);
+                    return;
+                }
+                if (joined.length() > 0) joined.append(' ');
+                joined.append(text.trim());
+                uploadChunks(pcm, end, joined);
+            }
+
+            @Override
+            public void onError(String message) {
+                emitError(message);
+            }
+        }, 0);
+    }
+
+    /** 网络抖动或 429 重试一次，长录音别因为某一段失败整段白录。 */
+    private void uploadWithRetry(byte[] wav, UploadCallback cb, int attempt) {
+        upload(wav, new UploadCallback() {
+            @Override
+            public void onText(String text) {
+                cb.onText(text);
+            }
+
+            @Override
+            public void onError(String message) {
+                if (attempt < 1 && !cancelled) {
+                    uploadWithRetry(wav, cb, attempt + 1);
+                } else {
+                    cb.onError(message);
+                }
+            }
+        });
+    }
+
+    interface UploadCallback {
+        void onText(String text);
+
+        void onError(String message);
     }
 
     @Override
@@ -99,33 +174,48 @@ public class BailianAsrEngine implements AsrEngine {
         if (inFlight != null) inFlight.cancel();
     }
 
-    private void upload(byte[] wav) {
+    private void upload(byte[] wav, UploadCallback cb) {
         if (TextUtils.isEmpty(config.apiKey)) {
-            emitError("还没填百炼 API Key，去设置里填一下");
+            cb.onError("还没填识别服务的 API Key，去设置里填一下");
+            return;
+        }
+        if (AsrConfig.isZhipuEndpoint(config.endpoint)) {
+            uploadZhipu(wav, cb);
             return;
         }
         String dataUri = "data:audio/wav;base64," + Base64.encodeToString(wav, Base64.NO_WRAP);
         String language = TextUtils.isEmpty(config.language) ? "zh" : config.language;
-        boolean nativeMode = AsrConfig.BAILIAN_MODEL_AUDIO.equals(config.model);
+        // 默认中英混合识别，测试语音和日常夹英文都能转出来
+        String languageHints = "en".equalsIgnoreCase(language) ? "[\"en\",\"zh\"]" : "[\"zh\",\"en\"]";
+        // 实时模型只适合 WebSocket；如果流式失败退回整段上传，
+        // 必须换成同系列的整段模型，否则一定报参数错误。
+        String model = config.batchModel();
+        // qwen-audio 系列的整段识别模型走百炼原生多模态接口，
+        // 换到小米等兼容接口时不能走这个路径，否则一定是 404。
+        boolean nativeMode = model.toLowerCase(java.util.Locale.ROOT).startsWith("qwen-audio-")
+                && AsrConfig.isBailianEndpoint(config.endpoint);
 
         String body;
         String url;
         if (nativeMode) {
             // qwen-audio-3.1-asr-flash 走原生多模态接口，格式参数必须放在 parameters 里
-            url = AsrConfig.BAILIAN_NATIVE_ENDPOINT;
-            body = "{\"model\":\"" + config.model + "\","
+            url = AsrConfig.nativeEndpoint(config.endpoint);
+            body = "{\"model\":\"" + model + "\","
                     + "\"input\":{\"messages\":[{\"role\":\"user\",\"content\":["
                     + "{\"type\":\"input_audio\",\"input_audio\":{\"data\":\"" + dataUri + "\"}}]}]},"
                     + "\"parameters\":{\"format\":\"wav\",\"sample_rate\":\"16000\","
-                    + "\"language_hints\":[\"" + language + "\"]}}";
+                    + "\"language_hints\":" + languageHints + "}}";
         } else {
-            // qwen3-asr-flash 走 OpenAI 兼容的 chat/completions
-            url = AsrConfig.BAILIAN_ENDPOINT;
-            body = "{\"model\":\"" + config.model + "\","
+            // 小米、普通 OpenAI 兼容接口走这一条。不同平台对 asr_options
+            // 的支持不一样，只有明确支持的小米才带，免得别的平台回参数错误。
+            String asrOptions = AsrConfig.isXiaomiEndpoint(config.endpoint)
+                    ? ",\"asr_options\":{\"language\":\"" + language + "\",\"enable_itn\":true}"
+                    : "";
+            url = AsrConfig.polishEndpoint(config.endpoint);
+            body = "{\"model\":\"" + model + "\","
                     + "\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_audio\","
-                    + "\"input_audio\":{\"data\":\"" + dataUri + "\"}}]}],"
-                    + "\"asr_options\":{\"language\":\"" + language + "\",\"enable_itn\":true},"
-                    + "\"stream\":false}";
+                    + "\"input_audio\":{\"data\":\"" + dataUri + "\"}}]}]"
+                    + asrOptions + ",\"stream\":false}";
         }
 
         Request request = new Request.Builder()
@@ -140,7 +230,7 @@ public class BailianAsrEngine implements AsrEngine {
             @Override
             public void onFailure(okhttp3.Call call, IOException e) {
                 if (cancelled) return;
-                emitError("网络没通：" + e.getMessage());
+                cb.onError("网络没通：" + e.getMessage());
             }
 
             @Override
@@ -149,20 +239,59 @@ public class BailianAsrEngine implements AsrEngine {
                 try {
                     text = response.body() != null ? response.body().string() : "";
                 } catch (IOException e) {
-                    emitError("读取返回失败");
+                    cb.onError("读取返回失败");
                     return;
                 }
                 if (cancelled) return;
                 if (!response.isSuccessful()) {
-                    emitError(hintForCode(response.code()) + errorMessage(text));
+                    cb.onError(hintForCode(response.code()) + errorMessage(text));
                     return;
                 }
                 String result = contentOf(text);
-                if (TextUtils.isEmpty(result)) {
-                    emitError("没识别出内容，再说一次");
-                } else {
-                    emitFinal(result);
+                if (TextUtils.isEmpty(result)) cb.onError("没识别出内容，再说一次");
+                else cb.onText(result);
+            }
+        });
+    }
+
+    /** 智谱的语音转写不是 chat/completions，要用 multipart 传 wav。 */
+    private void uploadZhipu(byte[] wav, UploadCallback cb) {
+        RequestBody file = RequestBody.create(wav, MediaType.parse("audio/wav"));
+        MultipartBody body = new MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("model", config.model)
+                .addFormDataPart("file", "audio.wav", file)
+                .build();
+        Request request = new Request.Builder()
+                .url(AsrConfig.zhipuTranscriptionEndpoint(config.endpoint))
+                .addHeader("Authorization", "Bearer " + config.apiKey)
+                .post(body)
+                .build();
+        inFlight = client.newCall(request);
+        inFlight.enqueue(new okhttp3.Callback() {
+            @Override
+            public void onFailure(okhttp3.Call call, IOException e) {
+                if (cancelled) return;
+                cb.onError("网络没通：" + e.getMessage());
+            }
+
+            @Override
+            public void onResponse(okhttp3.Call call, Response response) {
+                String text;
+                try {
+                    text = response.body() != null ? response.body().string() : "";
+                } catch (IOException e) {
+                    cb.onError("读取返回失败");
+                    return;
                 }
+                if (cancelled) return;
+                if (!response.isSuccessful()) {
+                    cb.onError(hintForCode(response.code()) + errorMessage(text));
+                    return;
+                }
+                String result = contentOf(text);
+                if (TextUtils.isEmpty(result)) cb.onError("没识别出内容，再说一次");
+                else cb.onText(result);
             }
         });
     }
@@ -185,22 +314,39 @@ public class BailianAsrEngine implements AsrEngine {
     private String contentOf(String json) {
         try {
             JsonObject root = JsonParser.parseString(json).getAsJsonObject();
-            // 云端识别也烧 token，能拿到就记一笔
+            boolean usageRecorded = false;
             if (appCtx != null && root.has("usage") && root.get("usage").isJsonObject()) {
                 JsonObject u = root.getAsJsonObject("usage");
                 if (u.has("total_tokens") && !u.get("total_tokens").isJsonNull()) {
                     com.minivoice.ime.settings.Prefs.addTokens(appCtx, u.get("total_tokens").getAsInt(), "识别");
+                    usageRecorded = true;
                 }
             }
+            String result = null;
             JsonObject output = root.has("output") ? root.getAsJsonObject("output") : null;
             if (output != null && output.has("text")) {
-                return output.get("text").getAsString().trim();
+                result = output.get("text").getAsString().trim();
+            } else if (root.has("text") && !root.get("text").isJsonNull()) {
+                // 智谱的转写接口直接返回 text，部分兼容接口放在 result 里。
+                result = root.get("text").getAsString().trim();
+            } else if (root.has("result") && root.get("result").isJsonPrimitive()) {
+                result = root.get("result").getAsString().trim();
+            } else {
+                JsonArray choices = root.getAsJsonArray("choices");
+                if (choices != null && choices.size() > 0) {
+                    JsonObject message = choices.get(0).getAsJsonObject().getAsJsonObject("message");
+                    if (message != null && message.has("content")
+                            && !message.get("content").isJsonNull()) {
+                        result = message.get("content").getAsString().trim();
+                    }
+                }
             }
-            JsonArray choices = root.getAsJsonArray("choices");
-            if (choices == null || choices.size() == 0) return null;
-            JsonObject message = choices.get(0).getAsJsonObject().getAsJsonObject("message");
-            if (message == null) return null;
-            return message.get("content").getAsString().trim();
+            if (result != null && !usageRecorded && appCtx != null) {
+                // 有些整段接口不返回 usage，按识别文本长度估一笔，避免用量一直是 0。
+                com.minivoice.ime.settings.Prefs.addTokens(appCtx,
+                        Math.max(1, result.length()), "识别");
+            }
+            return result;
         } catch (Exception e) {
             Log.w(TAG, "解析返回失败", e);
             return null;

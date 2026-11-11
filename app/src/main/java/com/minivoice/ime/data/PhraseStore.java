@@ -2,6 +2,8 @@ package com.minivoice.ime.data;
 
 import android.content.Context;
 
+import com.minivoice.ime.settings.Prefs;
+
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
@@ -28,6 +30,8 @@ public final class PhraseStore {
         public String code = "";
         public String label = "";
         public String text = "";
+        /** 个人词库专用：这个词常被识别成的样子，多个用逗号隔开。 */
+        public String alias = "";
         public String type = TYPE_PERSONAL;
 
         public Phrase() {
@@ -74,6 +78,7 @@ public final class PhraseStore {
         } catch (Exception ignore) {
             // 文件坏了就当空的，别让输入法起不来
         }
+        migrateLegacy(ctx);
         return new ArrayList<>(cache);
     }
 
@@ -97,13 +102,38 @@ public final class PhraseStore {
         }
     }
 
+    private static void writeFile(Context ctx) {
+        try {
+            Files.write(file(ctx).toPath(), GSON.toJson(cache).getBytes(StandardCharsets.UTF_8));
+        } catch (Exception ignore) {
+        }
+    }
+
+    /** 老版本的个人词库其实存的是「缩写 + 整段正文」，升级后统一挪到快捷输入。 */
+    private static void migrateLegacy(Context ctx) {
+        if (Prefs.getBool(ctx, "phrase_personal_migrated_v55", false)) return;
+        boolean changed = false;
+        for (Phrase p : cache) {
+            if (TYPE_PERSONAL.equals(p.type) && p.code != null && !p.code.isEmpty()) {
+                p.type = TYPE_QUICK;
+                changed = true;
+            }
+        }
+        if (changed) writeFile(ctx);
+        Prefs.putBool(ctx, "phrase_personal_migrated_v55", true);
+    }
+
     public static synchronized void addAll(Context ctx, List<Phrase> news) {
         List<Phrase> list = all(ctx);
         for (Phrase p : news) {
             if (p == null || p.isEmpty()) continue;
-            // 缩写一样的就直接换成新的，别攒一堆重复的
             for (int i = 0; i < list.size(); i++) {
-                if (!p.code.isEmpty() && p.code.equalsIgnoreCase(list.get(i).code)) {
+                Phrase old = list.get(i);
+                // 个人词库按词语本身去重，快捷输入按缩写去重
+                boolean same = TYPE_PERSONAL.equals(p.type)
+                        ? p.text.equalsIgnoreCase(old.text)
+                        : (!p.code.isEmpty() && p.code.equalsIgnoreCase(old.code));
+                if (same) {
                     list.remove(i);
                     break;
                 }
@@ -123,6 +153,15 @@ public final class PhraseStore {
             }
         }
         save(ctx, list);
+    }
+
+    /** 个人词库里所有正确写法，拿去做识别校准。 */
+    public static List<String> personalTerms(Context ctx) {
+        List<String> out = new ArrayList<>();
+        for (Phrase p : byType(ctx, TYPE_PERSONAL)) {
+            if (p.text != null && !p.text.trim().isEmpty()) out.add(p.text.trim());
+        }
+        return out;
     }
 
     /** 打字时用：按缩写前缀找，先匹配到的先出。 */

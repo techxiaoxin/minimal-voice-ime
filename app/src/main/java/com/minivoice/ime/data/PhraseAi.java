@@ -46,6 +46,13 @@ public final class PhraseAi {
                     + "多条信息用换行放在同一条正文里。\n"
                     + "4. 只输出这些行，不要编号、不要解释、不要空行、不要 Markdown。";
 
+    private static final String SYSTEM_PERSONAL =
+            "你是输入法的个人词库整理助手。用户会粘一段文字，里面可能混着人名、公司名、产品名、型号、英文名。\n"
+                    + "请把这些专有名词整理成一行一条，格式固定为：正确写法|常被识别成\n"
+                    + "1. 正确写法：照原文写，一个字都不许改。\n"
+                    + "2. 常被识别成：如果你能看出同音或形近的误写，写 1 到 2 个，用逗号分开；看不出来就留空，但竖线保留。\n"
+                    + "3. 只输出这些行，不要编号、不要解释、不要空行、不要 Markdown。";
+
     private static final OkHttpClient CLIENT = new OkHttpClient.Builder()
             .connectTimeout(8, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
@@ -67,12 +74,12 @@ public final class PhraseAi {
         new Thread(() -> {
             String out = "";
             boolean local = "local".equals(Prefs.getString(app, Prefs.K_POLISH_ENGINE, "cloud"));
-            if (local) out = fromLocal(app, raw);
-            if (out.isEmpty()) out = fromCloud(app, raw);
+            if (local) out = fromLocal(app, raw, sys(type));
+            if (out.isEmpty()) out = fromCloud(app, raw, sys(type));
             List<PhraseStore.Phrase> entries = parse(out, type);
             String note;
             if (!entries.isEmpty()) {
-                note = "整理出 " + entries.size() + " 条，缩写可以在列表里再改";
+                note = "整理出 " + entries.size() + " 条，可以在列表里再改";
             } else {
                 entries = fallback(raw, type);
                 note = entries.isEmpty()
@@ -85,24 +92,28 @@ public final class PhraseAi {
         }).start();
     }
 
-    private static String fromLocal(Context ctx, String raw) {
+    private static String sys(String type) {
+        return PhraseStore.TYPE_PERSONAL.equals(type) ? SYSTEM_PERSONAL : SYSTEM;
+    }
+
+    private static String fromLocal(Context ctx, String raw, String system) {
         try {
             if (!LlmPolisher.ensureLoaded(ctx)) return "";
-            String out = LocalLlm.generate(SYSTEM, raw, Math.max(160, Math.min(512, raw.length() / 4 + 120)));
+            String out = LocalLlm.generate(system, raw, Math.max(160, Math.min(512, raw.length() / 4 + 120)));
             return out == null ? "" : out.trim();
         } catch (Exception e) {
             return "";
         }
     }
 
-    private static String fromCloud(Context ctx, String raw) {
+    private static String fromCloud(Context ctx, String raw, String system) {
         try {
             AsrConfig c = AsrConfig.load(ctx);
             String key = c.apiKey;
             if (key == null || key.isEmpty()) return "";
             JsonObject sys = new JsonObject();
             sys.addProperty("role", "system");
-            sys.addProperty("content", SYSTEM);
+            sys.addProperty("content", system);
             JsonObject user = new JsonObject();
             user.addProperty("role", "user");
             user.addProperty("content", raw);

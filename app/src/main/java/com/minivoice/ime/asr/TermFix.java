@@ -5,6 +5,7 @@ import android.content.Context;
 import com.minivoice.ime.settings.Prefs;
 
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -69,8 +70,22 @@ public final class TermFix {
 
     public static String apply(Context ctx, String text) {
         if (text == null || text.isEmpty()) return text;
-        List<String> vocab = Prefs.getWordList(ctx);
-        return apply(text, vocab);
+        String out = text;
+        // 个人词库里写了「常被识别成」的，直接换成正确写法
+        for (com.minivoice.ime.data.PhraseStore.Phrase p
+                : com.minivoice.ime.data.PhraseStore.byType(ctx,
+                com.minivoice.ime.data.PhraseStore.TYPE_PERSONAL)) {
+            if (p.alias == null || p.text == null || p.text.trim().isEmpty()) continue;
+            for (String a : p.alias.split("[,，、\\s]+")) {
+                String al = a.trim();
+                if (al.length() >= 2 && !al.equals(p.text)) out = out.replace(al, p.text.trim());
+            }
+        }
+        List<String> vocab = new ArrayList<>(Prefs.getWordList(ctx));
+        for (String term : com.minivoice.ime.data.PhraseStore.personalTerms(ctx)) {
+            if (!vocab.contains(term)) vocab.add(term);
+        }
+        return apply(out, vocab);
     }
 
     public static String apply(String text, List<String> vocab) {

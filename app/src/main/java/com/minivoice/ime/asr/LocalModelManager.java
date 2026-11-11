@@ -27,12 +27,14 @@ public final class LocalModelManager {
 
     public static final String TIER_LIGHT = "light";
     public static final String TIER_HQ = "hq";
+    public static final String TIER_CUSTOM = "custom";
 
     /** 预览模型两档共用，24MB 的极简流式，下好一次切档就不用再下。 */
     public static final String STREAM_DIR = "sherpa-zh14m";
     /** 终稿模型两档各一个目录，能共存，切档不用重下。 */
     public static final String SV_DIR = "sherpa-sensevoice";
     public static final String HQ_FINAL_DIR = "sherpa-whisper-medium";
+    public static final String CUSTOM_FINAL_DIR = "sherpa-custom-asr";
 
     /** 预览模型：14M 流式 zipformer，int8，约 24MB，只认中文，英文靠终稿兜。 */
     public static final String[] STREAM_FILES = {
@@ -75,7 +77,12 @@ public final class LocalModelManager {
 
     public static String tier(Context ctx) {
         String t = Prefs.getString(ctx, Prefs.K_LOCAL_TIER, TIER_LIGHT);
-        return TIER_HQ.equals(t) ? TIER_HQ : TIER_LIGHT;
+        if (TIER_HQ.equals(t) || TIER_CUSTOM.equals(t)) return t;
+        return TIER_LIGHT;
+    }
+
+    public static boolean isCustom(Context ctx) {
+        return TIER_CUSTOM.equals(tier(ctx));
     }
 
     public static boolean isHq(Context ctx) {
@@ -91,10 +98,13 @@ public final class LocalModelManager {
     }
 
     public static String[] finalFiles(Context ctx) {
+        if (isCustom(ctx)) return LIGHT_FINAL_FILES;
         return isHq(ctx) ? HQ_FINAL_FILES : LIGHT_FINAL_FILES;
     }
 
     public static long[] finalSizes(Context ctx) {
+        // 自定义模型的体积事先不知道，用 0 表示只校验文件存在，不在下载到一半时截断。
+        if (isCustom(ctx)) return new long[]{0L, 0L};
         return isHq(ctx) ? HQ_FINAL_SIZES : LIGHT_FINAL_SIZES;
     }
 
@@ -113,7 +123,8 @@ public final class LocalModelManager {
     }
 
     public static File finalDir(Context ctx) {
-        String name = isHq(ctx) ? HQ_FINAL_DIR : SV_DIR;
+        String name = isCustom(ctx) ? CUSTOM_FINAL_DIR
+                : (isHq(ctx) ? HQ_FINAL_DIR : SV_DIR);
         File f = new File(ctx.getFilesDir(), name);
         if (!f.exists()) f.mkdirs();
         return f;
@@ -139,7 +150,8 @@ public final class LocalModelManager {
     private static boolean check(File dir, String[] files, long[] sizes) {
         for (int i = 0; i < files.length; i++) {
             File f = new File(dir, files[i]);
-            if (!f.exists() || f.length() < sizes[i] * 0.9) return false;
+            if (!f.exists()) return false;
+            if (sizes[i] > 0 && f.length() < sizes[i] * 0.9) return false;
         }
         return true;
     }
@@ -178,10 +190,14 @@ public final class LocalModelManager {
     }
 
     public static String tierLabel(Context ctx) {
+        if (isCustom(ctx)) return "自定义档";
         return isHq(ctx) ? "高精度档" : "轻量档";
     }
 
     public static String tierSummary(Context ctx) {
+        if (isCustom(ctx)) {
+            return "自定义 sherpa-onnx 语音识别模型，下载后会先加载校验，不是语音模型会提示。";
+        }
         if (isHq(ctx)) {
             return "极简预览加 whisper medium 终稿，中英都稳。";
         }
@@ -191,6 +207,13 @@ public final class LocalModelManager {
     public static String statusText(Context ctx) {
         if (isReady(ctx)) {
             return tierLabel(ctx) + "已下载，占用 " + mb(downloadedBytes(ctx)) + "MB";
+        }
+        if (isCustom(ctx)) {
+            String url = Prefs.getString(ctx, Prefs.K_LOCAL_URL_SV, "");
+            if (url == null || url.trim().isEmpty()) {
+                return "自定义模型还没填地址，点下载模型填写模型目录";
+            }
+            return "自定义模型还没下完，点下载模型继续";
         }
         if (streamReady(ctx) && !finalReady(ctx)) {
             return "流式模型已就位，终稿模型还没下完";
@@ -244,7 +267,7 @@ public final class LocalModelManager {
         for (int i = 0; i < files.length; i++) {
             String name = files[i];
             File out = new File(dir, name);
-            if (out.exists() && out.length() >= sizes[i] * 0.9) {
+            if (out.exists() && (sizes[i] <= 0 || out.length() >= sizes[i] * 0.9)) {
                 done += out.length();
                 listener.onProgress(done / (float) totalBytes, done, totalBytes);
                 index++;
@@ -268,7 +291,7 @@ public final class LocalModelManager {
                             fileDone += n;
                             long shown = done + fileDone;
                             listener.onProgress(shown / (float) totalBytes, shown, totalBytes);
-                            if (fileDone > sizes[i] * 1.5f) break;
+                            if (sizes[i] > 0 && fileDone > sizes[i] * 1.5f) break;
                         }
                         fos.flush();
                     }

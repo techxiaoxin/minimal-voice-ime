@@ -30,15 +30,16 @@ public final class TextPolisher {
         void onResult(String text);
     }
 
-    /** 默认提示词，短一点，给模型留余地，别把它框死。 */
+    /** 默认提示词：五条，短、清楚，不放词表。 */
     private static final String DEFAULT_SYSTEM =
-            "你是语音输入法的润色助手。用户给的是语音识别原文，口语、有错字，请改成像他自己打字发出来的话。"
-                    + "\n"
-                    + "1. 去掉嗯、啊、呃、那个、就是说这类口水词和重复啰嗦的地方。"
-                    + "2. 按上下文修同音错字，补标点、断句，句子顺一点。"
-                    + "3. 内容不增不减：说到的信息、语气、细节都要留下，不许扩写、总结、分条、加标题。"
-                    + "4. 人名、产品名、型号、数字、英文照原样，别翻译别改写。"
-                    + "5. 直接输出整理后的正文，不要任何前缀、引号或解释。";
+            "帮我整理下面这段语音转成的文字，规则只有几条：\n"
+            + "一、删掉纯语气词（嗯、啊、呃、唉）和所有重复、结巴，包括同一个词连说好几次的，"
+            + "比如「一个一个一个」「然后然后」「那个那个」，连说几次都只留一次。\n"
+            + "二、除了第一条说的语气词和重复，别的地方一个字都别动。有实际意思的词都留着，"
+            + "「就是说」「然后」「其实」这种连接词不算废话，不许删。\n"
+            + "三、只改错别字和标点，不改说法、不换词、不把长句压短。\n"
+            + "四、内容多、层次清楚的可以分段。\n"
+            + "五、直接给正文，不要标题、不要编号、不要解释。";
 
     private static final OkHttpClient CLIENT = new OkHttpClient.Builder()
             .connectTimeout(8, TimeUnit.SECONDS)
@@ -51,6 +52,12 @@ public final class TextPolisher {
 
     /** 设置页里看到的提示词：用户改过就用改过的。 */
     public static String rulesText(Context ctx) {
+        // 一次性清零：把之前存过的规则统一换成这一版，避免旧规则继续生效。
+        if (!Prefs.getBool(ctx, "polish_rule_reset_v51", false)) {
+            Prefs.putString(ctx, Prefs.K_PROMPT_CLOUD, DEFAULT_SYSTEM);
+            Prefs.putBool(ctx, "polish_rule_reset_v51", true);
+            return DEFAULT_SYSTEM;
+        }
         String custom = Prefs.getString(ctx, Prefs.K_PROMPT_CLOUD, "");
         return custom == null || custom.trim().isEmpty() ? DEFAULT_SYSTEM : custom;
     }
@@ -77,6 +84,12 @@ public final class TextPolisher {
             t = t.replaceAll("([\\u4e00-\\u9fa5])\\1{2,}", "$1");
             t = t.replaceAll("([\\u4e00-\\u9fa5]{2,4})\\1{2,}", "$1");
         } while (!t.equals(prev));
+
+        // 一句到底、中间完全没标点的，按常见连接词断一下，至少能读
+        if (t.length() >= 12 && !t.matches(".*[，。！？；：].*")) {
+            t = t.replaceAll("(?<![，。！？；：])(然后|但是|不过|所以|因为|而且|另外|接着|最后)", "，$1");
+            t = t.replaceAll("^，", "");
+        }
 
         // 标点前面不留空格，句末补一个句号
         t = t.replaceAll("\\s+([，。！？、；：])", "$1");
@@ -143,69 +156,90 @@ public final class TextPolisher {
         return r.trim();
     }
 
-    private static String request(Context ctx, String raw) {
+    /** 整理接口跟随识别，同一套地址和 Key。 */
+    public static String polishUrl(Context ctx, String asrEndpoint) {
+        return AsrConfig.polishEndpoint(asrEndpoint);
+    }
+
+    public static String polishKey(Context ctx, String asrKey) {
+        return asrKey;
+    }
+
+    /** 发一次 chat，成功后返回正文；出错返回 null。 */
+    private static String chat(Context ctx, String sysText, String userText, int maxTokens) {
         try {
             AsrConfig c = AsrConfig.load(ctx);
-            String key = c.apiKey;
-            if (key == null || key.isEmpty()) return raw;
+            String key = polishKey(ctx, c.apiKey);
+            if (key == null || key.isEmpty()) return null;
 
+            com.google.gson.JsonArray msgs = new com.google.gson.JsonArray();
             JsonObject sys = new JsonObject();
             sys.addProperty("role", "system");
-            List<String> vocab = Prefs.getWordList(ctx);
-            String sysText = rulesText(ctx);
-            if (!vocab.isEmpty()) {
-                StringBuilder sb = new StringBuilder(sysText);
-                sb.append("\n这些专有名词用户要求原样保留，读错了也按这个写法输出：");
-                for (int i = 0; i < vocab.size(); i++) {
-                    if (i > 0) sb.append("、");
-                    sb.append(vocab.get(i));
-                }
-                sysText = sb.toString();
-            }
             sys.addProperty("content", sysText);
+            msgs.add(sys);
             JsonObject user = new JsonObject();
             user.addProperty("role", "user");
-            user.addProperty("content", raw);
+            user.addProperty("content", userText);
+            msgs.add(user);
 
             JsonObject body = new JsonObject();
-            String pm = com.minivoice.ime.settings.Prefs.getString(ctx,
-                    com.minivoice.ime.settings.Prefs.K_POLISH_MODEL, AsrConfig.POLISH_MODEL);
+            String pm = Prefs.getString(ctx, Prefs.K_POLISH_MODEL, AsrConfig.POLISH_MODEL);
             body.addProperty("model", pm == null || pm.trim().isEmpty()
                     ? AsrConfig.POLISH_MODEL : pm.trim());
-            // 整理这一步只要结果，不要模型先想一段。开着思考会多花一两秒。
-            body.addProperty("enable_thinking", false);
-            com.google.gson.JsonArray msgs = new com.google.gson.JsonArray();
-            msgs.add(sys);
-            msgs.add(user);
+            // enable_thinking 是百炼兼容接口的参数，别家平台不认识，可能直接报参数错误
+            String url = polishUrl(ctx, c.endpoint);
+            if (url.contains("aliyuncs.com") || url.contains("dashscope")) {
+                body.addProperty("enable_thinking", false);
+            }
             body.add("messages", msgs);
-            body.addProperty("max_tokens", Math.min(800, raw.length() * 3 + 100));
-            body.addProperty("temperature", 0.2);
+            body.addProperty("max_tokens", maxTokens);
+            // Kimi 只接受 temperature=1，别的平台用低温度更稳。
+            body.addProperty("temperature", url.contains("moonshot") || url.contains("kimi") ? 1.0 : 0.2);
 
             Request req = new Request.Builder()
-                    .url(AsrConfig.polishEndpoint(c.endpoint))
+                    .url(url)
                     .addHeader("Authorization", "Bearer " + key)
                     .post(RequestBody.create(body.toString(),
                             MediaType.parse("application/json; charset=utf-8")))
                     .build();
 
             try (Response r = CLIENT.newCall(req).execute()) {
-                if (!r.isSuccessful() || r.body() == null) return raw;
-                String s = r.body().string();
-                JsonObject o = JsonParser.parseString(s).getAsJsonObject();
-                // 顺手把这次用掉的 token 记下来，设置页能看到累计用量
+                if (!r.isSuccessful() || r.body() == null) return null;
+                JsonObject o = JsonParser.parseString(r.body().string()).getAsJsonObject();
                 if (o.has("usage") && o.get("usage").isJsonObject()) {
                     JsonObject u = o.getAsJsonObject("usage");
                     if (u.has("total_tokens") && !u.get("total_tokens").isJsonNull()) {
                         Prefs.addTokens(ctx, u.get("total_tokens").getAsInt(), "整理");
                     }
                 }
-                String text = o.getAsJsonArray("choices").get(0).getAsJsonObject()
+                return o.getAsJsonArray("choices").get(0).getAsJsonObject()
                         .getAsJsonObject("message").get("content").getAsString();
-                text = sanitize(text, raw);
-                return text.isEmpty() ? raw : text;
             }
         } catch (Exception e) {
-            return raw;
+            return null;
         }
+    }
+
+    private static String request(Context ctx, String raw) {
+        String sysText = rulesText(ctx);
+        List<String> vocab = new java.util.ArrayList<>(Prefs.getWordList(ctx));
+        for (String term : com.minivoice.ime.data.PhraseStore.personalTerms(ctx)) {
+            if (!vocab.contains(term)) vocab.add(term);
+        }
+        if (!vocab.isEmpty()) {
+            StringBuilder sb = new StringBuilder(sysText);
+            sb.append("\n这些专有名词用户要求原样保留，读错了也按这个写法输出：");
+            for (int i = 0; i < vocab.size(); i++) {
+                if (i > 0) sb.append("、");
+                sb.append(vocab.get(i));
+            }
+            sysText = sb.toString();
+        }
+        String text = chat(ctx, sysText, raw, Math.min(800, raw.length() * 3 + 100));
+        if (text == null) return raw;
+        text = sanitize(text, raw);
+        if (text.isEmpty()) return raw;
+
+        return text;
     }
 }

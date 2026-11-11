@@ -11,6 +11,7 @@ public final class PhraseParser {
 
     /** 模型可能加序号、加反引号、换分隔符，这里尽量宽容地读。 */
     public static List<PhraseStore.Phrase> parse(String out, String type) {
+        if (PhraseStore.TYPE_PERSONAL.equals(type)) return parsePersonal(out);
         List<PhraseStore.Phrase> list = new ArrayList<>();
         if (out == null || out.isEmpty()) return list;
         for (String line : out.split("\n")) {
@@ -64,7 +65,42 @@ public final class PhraseParser {
     }
 
     /** 模型完全没干活时的兜底：一行一条，有冒号就前面当名称。 */
+    /** 个人词库：一行一个词，格式「正确写法|常被识别成」，后半段可以空着。 */
+    private static List<PhraseStore.Phrase> parsePersonal(String out) {
+        List<PhraseStore.Phrase> list = new ArrayList<>();
+        if (out == null || out.isEmpty()) return list;
+        for (String line : out.split("\n")) {
+            String t = line.trim();
+            if (t.isEmpty()) continue;
+            t = t.replaceAll("^[-*•]+\\s*", "");
+            t = t.replaceAll("^\\d+[.、)]\\s*", "");
+            t = t.replace("｜", "|");
+            String[] parts = t.split("\\|");
+            String word = parts[0].trim();
+            String alias = parts.length > 1 ? parts[1].trim() : "";
+            if (word.isEmpty()) continue;
+            PhraseStore.Phrase p = new PhraseStore.Phrase("", "", word,
+                    PhraseStore.TYPE_PERSONAL);
+            p.alias = alias;
+            list.add(p);
+            if (list.size() >= 40) break;
+        }
+        return list;
+    }
+
     public static List<PhraseStore.Phrase> fallback(String raw, String type) {
+        if (PhraseStore.TYPE_PERSONAL.equals(type)) {
+            List<PhraseStore.Phrase> words = new ArrayList<>();
+            for (String line : raw.split("\n")) {
+                String t = line.trim();
+                if (t.isEmpty()) continue;
+                PhraseStore.Phrase p = new PhraseStore.Phrase("", "", t,
+                        PhraseStore.TYPE_PERSONAL);
+                words.add(p);
+                if (words.size() >= 20) break;
+            }
+            return words;
+        }
         List<PhraseStore.Phrase> list = new ArrayList<>();
         String[] lines = raw.split("\n");
         for (String line : lines) {

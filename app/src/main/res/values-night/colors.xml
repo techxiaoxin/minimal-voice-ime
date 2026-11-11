@@ -5,7 +5,6 @@
     <color name="card_bg">#1B1E24</color>
     <color name="input_bg">#22262D</color>
     <color name="btn_bg">#23272E</color>
-    <color name="btn_bg_pressed">#31363F</color>
     <color name="btn_stroke">#2A2F37</color>
     <color name="divider">#2A2F37</color>
     <color name="accent">#4C8DFF</color>
@@ -16,12 +15,9 @@
     <color name="text_hint">#5C6270</color>
     <color name="key_text">#FFFFFF</color>
     <color name="voice_bar_bg">#23272E</color>
-    <color name="voice_bar_pressed">#31363F</color>
     <color name="nav_bar">#14161A</color>
-    <color name="chip_bg">#23272E</color>
     <color name="ripple">#26FFFFFF</color>
     <color name="success">#22C55E</color>
-    <color name="warn">#F5A623</color>
     <color name="chip_stroke">#3C424C</color>
     <color name="quick_bar_bg">#2B3240</color>
     <color name="quick_bar_stroke">#404A5C</color>
