@@ -33,9 +33,7 @@
 
 阿里云百炼新用户有免费模型额度，个人日常用语音识别和文字整理，先拿免费额度试最划算。
 
-免费额度查询：
-
-https://bailian.console.aliyun.com/cn-beijing/costing-balance/free-quota
+免费额度查询：[阿里云百炼免费额度](https://bailian.console.aliyun.com/cn-beijing/costing-balance/free-quota)
 
 进去以后开通百炼，创建一个 API Key，复制下来填到输入法里。
 
