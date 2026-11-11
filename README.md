@@ -1,5 +1,7 @@
 # 极简语音输入法 Minimal Voice IME
 
+作者：@科技小辛　[微博](https://weibo.com/1595443924)　[抖音](https://www.douyin.com/user/MS4wLjABAAAA9SV_GSD6dDUM8BJqVdW4z3nBAEWc1Xo2q_Jr2WzG-uk?from_tab_name=main)　[小红书](https://www.xiaohongshu.com/user/profile/5cd95d1e0000000011015d9c)
+
 一个不占屏幕的安卓语音输入法。默认只留一条语音栏，按住说话，松手转成文字，AI 整理完点一下发送。需要手打的时候再展开全键盘，不需要为了说一句话先把整块键盘顶上来。
 
 没有广告，没有推送，没有多余按键。云端识别可以走阿里云百炼，也可以切到本地模型，整条链路不联网。
@@ -37,21 +39,7 @@ https://bailian.console.aliyun.com/cn-beijing/costing-balance/free-quota
 2. 没有账号的先注册一个阿里云账号，已经有账号的直接登录。
 3. 在「免费额度」页面里把模型的开关打开，建议全部打开，语音识别和文字整理都能用免费额度先试。
 4. 创建一个 API Key，复制下来，等会儿填到输入法里。
-5. 回到输入法的「模型设置」，填接口地址和 API Key。
-
-接口地址先填这个公共地址：
-
-```text
-https://dashscope.aliyuncs.com/compatible-mode/v1
-```
-
-这个公共地址我测过，网络能连上。但如果你用的是自己业务空间的 Key，公共地址有可能读不到你账号下的模型。遇到这种情况，去百炼控制台复制你自己账号里的 OpenAI base URL，一般长这样：
-
-```text
-https://<你的业务空间域名>/compatible-mode/v1
-```
-
-把它填到「接口地址」，API Key 还是填刚复制的那个。
+5. 回到输入法的「模型设置」，把 API Key 填进去，接口地址填你在百炼控制台复制的 OpenAI base URL。这个地址每个账号可能不一样，直接复制自己账号里的那一行，不要照抄别人的。
 
 填完点「保存」，回到输入框按住说话就能用了。下面的模型选择先不用管，默认值已经能用。
 
@@ -172,6 +160,12 @@ app/src/main/java/com/minivoice/ime/
 - 拼音表只收了词频 100 以上的词，很冷僻的词和个别长串会切得不够漂亮。
 - ARM 的 Mac 上开安卓模拟器需要虚拟化权限，某些环境跑不起来，这部分只能真机验。
 
-## 许可
+## 作者
 
-MIT，见 LICENSE。
+@科技小辛
+
+- 微博：https://weibo.com/1595443924
+- 抖音：https://www.douyin.com/user/MS4wLjABAAAA9SV_GSD6dDUM8BJqVdW4z3nBAEWc1Xo2q_Jr2WzG-uk?from_tab_name=main
+- 小红书：https://www.xiaohongshu.com/user/profile/5cd95d1e0000000011015d9c
+
+本项目采用 MIT 许可，见 LICENSE。

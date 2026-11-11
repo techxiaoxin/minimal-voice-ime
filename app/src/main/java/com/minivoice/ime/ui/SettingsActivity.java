@@ -566,6 +566,8 @@ public class SettingsActivity extends AppCompatActivity {
         String u = line == null ? "" : line.toUpperCase(java.util.Locale.ROOT);
         return u.contains("FAILURE") || u.contains("ERROR") || u.contains("DENIED")
                 || u.contains("EXCEPTION") || u.contains("失败") || u.contains("错误")
+                || u.contains("MODELS_EMPTY") || u.contains("MODELS_NO_USABLE")
+                || u.contains("MODELS_NO_KEY")
                 || u.matches(".*CODE=(4|5)[0-9][0-9].*");
     }
 
@@ -1853,6 +1855,8 @@ public class SettingsActivity extends AppCompatActivity {
             key = pk.isEmpty() ? key : pk;
         }
         if (key.isEmpty()) {
+            logSettingsDiag("ERROR MODELS_NO_KEY " + (polish ? "polish" : "asr")
+                    + " 没有填写 API Key，无法读取模型");
             Toast.makeText(this, "先填 API Key", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -1865,7 +1869,7 @@ public class SettingsActivity extends AppCompatActivity {
         btn.setProgress(0);
         btn.setText(R.string.settings_fetch_models);
         if (pb != null) {
-            pb.setProgress(0);
+            pb.setProgress(0, true);
         }
         setFetchProgressVisible(polish, true);
         Toast.makeText(this, R.string.models_fetching, Toast.LENGTH_SHORT).show();
@@ -1878,8 +1882,9 @@ public class SettingsActivity extends AppCompatActivity {
                 err = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
             }
             if (ids == null || ids.isEmpty()) {
-                logSettingsDiag("MODELS_EMPTY " + (polish ? "polish" : "asr")
+                logSettingsDiag("ERROR MODELS_EMPTY " + (polish ? "polish" : "asr")
                         + " host=" + AsrConfig.hostOf(ep)
+                        + " 读取模型列表失败"
                         + (err.isEmpty() ? "" : " " + err));
                 runOnUiThread(() -> {
                     btn.setEnabled(true);
@@ -1912,7 +1917,7 @@ public class SettingsActivity extends AppCompatActivity {
                     int pct = total <= 0 ? 100 : d * 100 / total;
                     runOnUiThread(() -> {
                         btn.setProgress(pct);
-                        if (pb != null) pb.setProgress(pct);
+                        if (pb != null) pb.setProgress(pct, true);
                         setFetchPct(polish, pct);
                     });
                 });
@@ -1932,8 +1937,9 @@ public class SettingsActivity extends AppCompatActivity {
                 btn.setText(R.string.settings_fetch_models);
                 setFetchProgressVisible(polish, false);
                 if (fIds.isEmpty()) {
-                    logSettingsDiag("MODELS_NO_USABLE " + (polish ? "polish" : "asr")
-                            + " host=" + AsrConfig.hostOf(ep) + " total=" + total);
+                    logSettingsDiag("ERROR MODELS_NO_USABLE " + (polish ? "polish" : "asr")
+                            + " host=" + AsrConfig.hostOf(ep) + " total=" + total
+                            + " 所有候选模型都不可用，检查 Key 权限或模型是否开通");
                     if (polish) {
                         polishResult(false, getString(R.string.models_none));
                     } else {
