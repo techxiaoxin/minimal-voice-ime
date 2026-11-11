@@ -52,26 +52,20 @@
 
 ## 第一次用要配什么
 
-仓库里没有内置 Key，源码里的默认值是空串，clone 下来装完是没法直接用的。两种办法：
+仓库和安装包里都不内置 Key，也不写死任何业务空间域名。clone 下来装完必须先填自己的接口信息才能用云端功能。
 
-一是在设置页填自己的阿里云百炼 Key。`sk-ws-` 开头的业务空间 Key 必须配业务空间专属域名：
+一是在设置页填自己的阿里云百炼 Key。普通 Key 用默认的公共地址 `https://dashscope.aliyuncs.com/compatible-mode/v1` 就行；`sk-ws-` 开头的业务空间 Key 请填你自己的业务空间域名，仓库里不会替你保存：
 
 - 识别地址：`https://<你的业务空间域名>/api/v1/services/aigc/multimodal-generation/generation`
 - 识别模型：`qwen-audio-3.1-asr-flash`
-- 流式实时：`wss://<域名>/api-ws/v1/realtime?model=qwen3-asr-flash-realtime`
-- AI 整理：`https://<域名>/compatible-mode/v1/chat/completions`，模型 `qwen3.8-flash`
+- 流式实时：程序固定走公共 `wss://dashscope.aliyuncs.com/api-ws/v1/realtime`，不用填
+- AI 整理：`https://<你的业务空间域名>/compatible-mode/v1/chat/completions`，模型 `qwen3.8-flash`
 
 模型框下面有「读取」和「测试」两个按钮：读取只拉这一类能用的模型，上面只列语音识别模型，下面只列文字整理模型，拉回来会逐个试一次，跑不通的不显示；测试才是真的发一次识别或整理请求。识别和整理固定共用顶部的接口地址和 Key，没有单独的整理地址、整理 Key，也没有同步和展开编辑窗口，读取模型时两处都直接用顶部这一套。
 
-识别和整理是两类模型，别填反：识别那栏只填语音模型，名字里带 `asr`、`audio` 或 `realtime`，整段识别用 `qwen-audio-3.1-asr-flash`，边说边出字用 `qwen3-asr-flash-realtime`；整理那栏只填普通文本大模型，比如 `qwen3.8-flash`。接口地址填业务域名就行，流式地址和整理地址程序会自己换算。
+识别和整理是两类模型，别填反：识别那栏只填语音模型，名字里带 `asr`、`audio` 或 `realtime`，整段识别用 `qwen-audio-3.1-asr-flash`，边说边出字用 `qwen3-asr-flash-realtime`；整理那栏只填普通文本大模型，比如 `qwen3.8-flash`。接口地址填业务域名就行，识别和整理的地址程序会自己换算；流式入口固定走公共地址。
 
 二是干脆不填，切到本地模式，模型在设置页里直接下，整条链路不联网。云端那部分不填 Key 就不会被调用。
-
-如果自己编译、想让它装完就能用，把 Key 写进 `local.properties`，这个文件不会进仓库：
-
-```properties
-bailian.key=sk-ws-你自己的key
-```
 
 ## 怎么编译
 

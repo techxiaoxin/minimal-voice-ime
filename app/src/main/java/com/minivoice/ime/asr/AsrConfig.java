@@ -27,26 +27,18 @@ public class AsrConfig {
     public static final String BAILIAN_BATCH_MODEL = "qwen3-asr-flash";
     /** AI 整理用的文本模型，换成 flash 版，关掉思考后单次不到一秒。 */
     public static final String POLISH_MODEL = "qwen3.8-flash";
-    /** 业务空间专属地址：sk-ws- 开头的 Key 必须配这个域名，用通用域名会被判 401。 */
+    /** 百炼公共原生多模态识别地址，不绑定任何业务空间。 */
     public static final String BAILIAN_NATIVE_ENDPOINT =
-            "https://private-space.example.com/api/v1/services/aigc/multimodal-generation/generation";
-    /** 兼容接口地址，留作备用。 */
+            "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";
+    /** 百炼公共兼容接口地址。 */
     public static final String BAILIAN_ENDPOINT =
-            "https://private-space.example.com/compatible-mode/v1/chat/completions";
-    /** 普通百炼 Key 用这个公共地址；它和业务空间专属地址不是一回事。 */
+            "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
+    /** 普通百炼 Key 用这个公共地址。 */
     public static final String BAILIAN_PUBLIC_ENDPOINT =
             "https://dashscope.aliyuncs.com/compatible-mode/v1";
-    /** 内置 Key 或域名每换一次就 +1，老用户升级时靠它自动覆盖成新值。 */
-    public static final int BUILTIN_VERSION = 3;
-    /**
-     * 内置 Key 不写死在源码里，编译时从本机 local.properties 的 bailian.key 读进来。
-     * 仓库里这个值是空串，别人 clone 下来装完是没有内置 Key 的，
-     * 需要自己去设置页填自己的百炼 Key。这样公开源码不会把额度共享出去。
-     */
-    public static final String BAILIAN_KEY = com.minivoice.ime.BuildConfig.DEFAULT_BAILIAN_KEY;
-
     public String endpoint = BAILIAN_NATIVE_ENDPOINT;
-    public String apiKey = BAILIAN_KEY;
+    /** 仓库不内置任何 Key，装完由用户在设置页自己填。 */
+    public String apiKey = "";
     public String model = BAILIAN_MODEL;
     public String protocol = PROTOCOL_BAILIAN;
     public String language = "zh";
@@ -73,21 +65,6 @@ public class AsrConfig {
         c.polish = Prefs.getBool(ctx, Prefs.K_POLISH, true);
 
         if (PROTOCOL_BAILIAN.equals(proto)) {
-            int storedVer = 0;
-            try {
-                storedVer = Integer.parseInt(Prefs.getString(ctx, Prefs.K_BUILTIN_VER, "0"));
-            } catch (Exception ignored) {
-            }
-            if (storedVer != BUILTIN_VERSION) {
-                // 内置 Key 或域名换过版本，把本机的旧值整体刷成新的，避免继续用 401 的老配置
-                c.apiKey = sanitizeKey(BAILIAN_KEY);
-                c.model = BAILIAN_MODEL;
-                c.endpoint = BAILIAN_NATIVE_ENDPOINT;
-                Prefs.putString(ctx, Prefs.K_BUILTIN_VER, String.valueOf(BUILTIN_VERSION));
-                c.save(ctx);
-                return c;
-            }
-            // 版本没变，说明用户可能在设置页手动改过并保存，这时候以本机的值为准
             c.endpoint = orDefault(Prefs.getString(ctx, Prefs.K_ENDPOINT, ""), BAILIAN_NATIVE_ENDPOINT);
             c.apiKey = loadKey(ctx);
             c.model = orDefault(Prefs.getString(ctx, Prefs.K_MODEL, ""), BAILIAN_MODEL);
@@ -100,10 +77,10 @@ public class AsrConfig {
         return c;
     }
 
-    /** 恢复默认清空过 Key 的，就不再用内置 Key 顶替。 */
+    /** 只读用户自己保存的 Key，仓库和安装包里都没有内置 Key。 */
     private static String loadKey(Context ctx) {
         if (Prefs.getBool(ctx, Prefs.K_KEY_CLEARED, false)) return "";
-        return sanitizeKey(orDefault(Prefs.getString(ctx, Prefs.K_API_KEY, ""), BAILIAN_KEY));
+        return sanitizeKey(Prefs.getString(ctx, Prefs.K_API_KEY, ""));
     }
 
     /**
@@ -316,7 +293,7 @@ public class AsrConfig {
         } catch (Exception ignored) {
         }
         if (host == null || host.isEmpty()) {
-            host = "private-space.example.com";
+            host = "dashscope.aliyuncs.com";
         }
         // 用户直接填了 wss 地址，就沿着他填的路径走，只把 model 换成当前这个
         if ("ws".equals(scheme) || "wss".equals(scheme)) {
@@ -340,7 +317,7 @@ public class AsrConfig {
         return k.replaceAll("[\\s\\u00A0\\u2007\\u202F\\u200B\\u200C\\u200D\\u200E\\u200F\\uFEFF]", "");
     }
 
-    /** 本机存的是空串时回落到内置值，防止空 Key 直接打出 401。 */
+    /** 本机存的是空串时回落到默认值，防止地址或模型为空。 */
     private static String orDefault(String v, String fallback) {
         return (v == null || v.trim().isEmpty()) ? fallback : v.trim();
     }

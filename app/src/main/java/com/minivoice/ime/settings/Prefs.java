@@ -27,8 +27,6 @@ public final class Prefs {
     public static final String K_DEVICE_NAME = "device_name";
     public static final String K_VOCAB = "custom_vocab";
     public static final String K_SYNC_PENDING = "sync_pending";
-    /** 记录内置 Key 与域名的版本，用来判断要不要刷掉本机的旧配置。 */
-    public static final String K_BUILTIN_VER = "builtin_ver";
     /** 语音转完是否再过一遍 AI 整理。 */
     public static final String K_POLISH = "ai_polish";
     /** AI 整理用哪个引擎：cloud 走百炼，local 走手机里的小模型。 */
@@ -36,7 +34,7 @@ public final class Prefs {
     public static final String K_PROMPT_CLOUD = "polish_prompt_cloud";
     /** 云端 AI 整理用的文本模型，用户可以在设置页自己换。 */
     public static final String K_POLISH_MODEL = "polish_model";
-    /** 用户点过恢复默认把 Key 清空了，读配置时别再偷偷塞回内置 Key。 */
+    /** 用户点过恢复默认把 Key 清空了，读配置时不要再补任何默认 Key。 */
     public static final String K_KEY_CLEARED = "key_cleared";
     /** 整理单独用一套地址和 Key，留空就沿用识别那套。 */
     public static final String K_POLISH_ENDPOINT = "polish_endpoint";

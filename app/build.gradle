@@ -10,19 +10,13 @@ android {
         applicationId "com.minivoice.ime"
         minSdk 26
         targetSdk 34
-        versionCode 131
-        versionName "0.6.28"
+        versionCode 134
+        versionName "0.6.31"
         ndk {
             abiFilters "arm64-v8a"
         }
-        // 内置 Key 不再写死在源码里，从本机的 local.properties 读，那个文件不进仓库。
-        // 仓库里默认是空串，用户装完自己去设置页填自己的 Key。
-        buildConfigField "String", "DEFAULT_BAILIAN_KEY", "\"${bailianKey()}\""
     }
 
-    buildFeatures {
-        buildConfig true
-    }
 
     buildTypes {
         debug {
@@ -55,16 +49,3 @@ dependencies {
     implementation 'com.google.code.gson:gson:2.10.1'
 }
 
-/**
- * 从 local.properties 读内置 Key。
- * 这个文件里有 sdk.dir 和 Key，永远不进仓库，别人 clone 下来读到的是空串，
- * 装完自己去设置页填自己的 Key 就能用。
- */
-String bailianKey() {
-    def props = new Properties()
-    def f = rootProject.file("local.properties")
-    if (f.exists()) {
-        f.withInputStream { props.load(it) }
-    }
-    return props.getProperty("bailian.key", "")
-}

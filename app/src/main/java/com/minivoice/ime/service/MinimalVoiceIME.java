@@ -1508,10 +1508,6 @@ public class MinimalVoiceIME extends InputMethodService {
         refreshCand();
         updateVoiceBar();
     }
-    private void onNumberKey(String key) {
-        commitKey(key);
-    }
-
     private void commitKey(String key) {
         InputConnection ic = getCurrentInputConnection();
         if (ic == null) return;

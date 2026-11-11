@@ -64,6 +64,10 @@ public class SettingsActivity extends AppCompatActivity {
     private ProgressOutlineButton btnPolishFetch;
     private android.widget.ProgressBar pbFetchModels;
     private android.widget.ProgressBar pbPolishFetch;
+    private android.widget.LinearLayout llFetchProgress;
+    private android.widget.LinearLayout llPolishFetchProgress;
+    private TextView tvFetchPct;
+    private TextView tvPolishFetchPct;
     private Button btnPolishCloud;
     private Button btnPolishLocal;
     private TextView btnPolishSync;
@@ -182,8 +186,22 @@ public class SettingsActivity extends AppCompatActivity {
         });
         btnFetchModels = findViewById(R.id.btn_fetch_models);
         btnPolishFetch = findViewById(R.id.btn_polish_fetch);
-        pbFetchModels = null;
-        pbPolishFetch = null;
+        pbFetchModels = findViewById(R.id.pb_fetch_models);
+        pbPolishFetch = findViewById(R.id.pb_polish_fetch);
+        llFetchProgress = findViewById(R.id.ll_fetch_progress);
+        llPolishFetchProgress = findViewById(R.id.ll_polish_fetch_progress);
+        tvFetchPct = findViewById(R.id.tv_fetch_pct);
+        tvPolishFetchPct = findViewById(R.id.tv_polish_pct);
+        TextView streamLegend = findViewById(R.id.tv_stream_legend);
+        if (streamLegend != null) {
+            String legend = "黑色字体不支持流式输入    绿色字体支持流式输入";
+            android.text.SpannableString sp = new android.text.SpannableString(legend);
+            int greenStart = legend.indexOf("绿色字体");
+            sp.setSpan(new android.text.style.ForegroundColorSpan(COLOR_GREEN),
+                    greenStart, legend.length(),
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            streamLegend.setText(sp);
+        }
         etModel.setOnClickListener(v -> showModelDropDown(etModel));
         etPolishModel.setOnClickListener(v -> showModelDropDown(etPolishModel));
         tvModelArrow = findViewById(R.id.tv_model_arrow);
@@ -529,6 +547,46 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     /** 点「明细」弹一块小窗，一次说话算一行：时间、识别、整理、合计。 */
+    /** 运行日志里错误行标红，正常行跟随主题文字色。 */
+    private android.text.SpannableStringBuilder buildDiagText(String log) {
+        android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder();
+        for (String line : log.split("\n", -1)) {
+            int start = sb.length();
+            sb.append(line).append('\n');
+            int color = isDiagErrorLine(line)
+                    ? 0xFFE53935 : getColor(R.color.text_primary);
+            sb.setSpan(new android.text.style.ForegroundColorSpan(color),
+                    start, sb.length(),
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        return sb;
+    }
+
+    private boolean isDiagErrorLine(String line) {
+        String u = line == null ? "" : line.toUpperCase(java.util.Locale.ROOT);
+        return u.contains("FAILURE") || u.contains("ERROR") || u.contains("DENIED")
+                || u.contains("EXCEPTION") || u.contains("失败") || u.contains("错误")
+                || u.matches(".*CODE=(4|5)[0-9][0-9].*");
+    }
+
+    private String collectErrorLines(String log) {
+        StringBuilder sb = new StringBuilder();
+        for (String line : log.split("\n")) {
+            if (isDiagErrorLine(line)) sb.append(line).append('\n');
+        }
+        return sb.toString().trim();
+    }
+
+    /** 设置页里的失败也要写进运行日志，不能只弹个 Toast。 */
+    private void logSettingsDiag(String line) {
+        String old = Prefs.getString(this, "asr_diag", "");
+        StringBuilder sb = new StringBuilder(old);
+        sb.append(android.os.SystemClock.elapsedRealtime()).append("  ")
+                .append(line).append('\n');
+        if (sb.length() > 6000) sb.delete(0, sb.length() - 6000);
+        Prefs.putString(this, "asr_diag", sb.toString());
+    }
+
     /** 最近一次实时识别的精简事件日志，方便直接复制回来排查。 */
     private void showAsrDiag() {
         final android.app.Dialog d = new android.app.Dialog(this);
@@ -538,7 +596,7 @@ public class SettingsActivity extends AppCompatActivity {
         box.setBackgroundResource(R.drawable.bg_card);
 
         TextView head = new TextView(this);
-        head.setText("识别诊断");
+        head.setText("运行日志");
         head.setTextSize(15);
         head.setTextColor(getColor(R.color.text_primary));
         head.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -547,9 +605,9 @@ public class SettingsActivity extends AppCompatActivity {
         String log = Prefs.getString(this, "asr_diag", "");
         if (log.isEmpty()) log = "还没有记录。请按住说话一次，再打开这里。";
         TextView body = new TextView(this);
-        body.setText(log);
+        body.setText(buildDiagText(log));
         body.setTextSize(10);
-        body.setTextColor(getColor(R.color.text_secondary));
+        body.setTextColor(getColor(R.color.text_primary));
         body.setTypeface(android.graphics.Typeface.MONOSPACE);
         body.setTextIsSelectable(true);
         body.setLineSpacing(dp(2), 1f);
@@ -563,7 +621,7 @@ public class SettingsActivity extends AppCompatActivity {
         android.widget.LinearLayout row = new android.widget.LinearLayout(this);
         row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
         android.widget.Button copy = new android.widget.Button(this);
-        copy.setText("复制日志");
+        copy.setText("复制错误日志");
         copy.setAllCaps(false);
         copy.setTextColor(getColor(R.color.text_primary));
         copy.setBackgroundResource(R.drawable.bg_btn_secondary);
@@ -584,12 +642,19 @@ public class SettingsActivity extends AppCompatActivity {
         lp2.setMarginStart(dp(8));
         row.addView(close, lp2);
         box.addView(row);
-        copy.setOnClickListener(v -> {
-            android.content.ClipboardManager cm = (android.content.ClipboardManager)
-                    getSystemService(android.content.Context.CLIPBOARD_SERVICE);
-            cm.setPrimaryClip(android.content.ClipData.newPlainText("识别诊断", body.getText()));
-            Toast.makeText(this, "已复制，直接粘贴发给我", Toast.LENGTH_SHORT).show();
-        });
+        String errorText = collectErrorLines(log);
+        if (errorText.isEmpty()) {
+            copy.setEnabled(false);
+            copy.setAlpha(0.45f);
+            copy.setText("没有错误日志");
+        } else {
+            copy.setOnClickListener(v -> {
+                android.content.ClipboardManager cm = (android.content.ClipboardManager)
+                        getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("错误日志", errorText));
+                Toast.makeText(this, "已复制错误日志，直接粘贴发给我", Toast.LENGTH_SHORT).show();
+            });
+        }
         close.setOnClickListener(v -> d.dismiss());
         d.setContentView(box);
         d.show();
@@ -1498,7 +1563,7 @@ public class SettingsActivity extends AppCompatActivity {
         AsrConfig c = new AsrConfig();
         String rawEp = etEndpoint.getText().toString().trim();
         String rawKey = AsrConfig.sanitizeKey(etApikey.getText().toString());
-        String key = rawKey.isEmpty() ? AsrConfig.BAILIAN_KEY : rawKey;
+        String key = rawKey;
         String fixedEp = AsrConfig.adaptEndpointForKey(rawEp, key);
         if (!fixedEp.equals(rawEp)) {
             etEndpoint.setText(fixedEp);
@@ -1507,7 +1572,6 @@ public class SettingsActivity extends AppCompatActivity {
         c.apiKey = rawKey;
         c.model = cleanModelId(etModel.getText().toString());
         if (c.endpoint.isEmpty()) c.endpoint = AsrConfig.BAILIAN_NATIVE_ENDPOINT;
-        if (c.apiKey.isEmpty()) c.apiKey = AsrConfig.BAILIAN_KEY;
         if (c.model.isEmpty()) c.model = AsrConfig.BAILIAN_MODEL;
         c.protocol = AsrConfig.PROTOCOL_LOCAL.equals(Prefs.getString(this, Prefs.K_PROTOCOL, ""))
                 ? AsrConfig.PROTOCOL_LOCAL : AsrConfig.PROTOCOL_BAILIAN;
@@ -1654,7 +1718,7 @@ public class SettingsActivity extends AppCompatActivity {
         };
 
         String low = model.toLowerCase(java.util.Locale.ROOT);
-        AsrEngine engine = low.contains("realtime")
+        AsrEngine engine = low.contains("realtime") || low.contains("streaming")
                 ? new RealtimeAsrEngine(c, this)
                 : new BailianAsrEngine(c, this);
         holder[0] = engine;
@@ -1727,7 +1791,7 @@ public class SettingsActivity extends AppCompatActivity {
     private void updateModelCapability(String id) {
         if (tvModelHint == null) return;
         String low = id == null ? "" : id.toLowerCase(java.util.Locale.ROOT);
-        if (low.contains("realtime")) {
+        if (low.contains("realtime") || low.contains("streaming")) {
             tvModelHint.setText("● 当前模型支持流式输入");
             tvModelHint.setTextColor(COLOR_GREEN);
             tvModelHint.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
@@ -1748,13 +1812,26 @@ public class SettingsActivity extends AppCompatActivity {
         if (v instanceof TextView) {
             TextView t = (TextView) v;
             String model = cleanModelId(id);
-            boolean stream = model.toLowerCase(java.util.Locale.ROOT).contains("realtime");
+            boolean stream = model.toLowerCase(java.util.Locale.ROOT).contains("realtime") || model.toLowerCase(java.util.Locale.ROOT).contains("streaming");
             t.setText(model);
             t.setTypeface(android.graphics.Typeface.create(
                     "sans-serif-light", android.graphics.Typeface.NORMAL));
             t.setTextColor(stream ? COLOR_GREEN : getColor(R.color.text_primary));
         }
         return v;
+    }
+
+    /** 数字进度条和按钮描边用同一个百分比，一起显示、一起收起。 */
+    private void setFetchProgressVisible(boolean polish, boolean visible) {
+        android.widget.LinearLayout row = polish ? llPolishFetchProgress : llFetchProgress;
+        if (row != null) row.setVisibility(visible
+                ? android.view.View.VISIBLE : android.view.View.GONE);
+        if (visible) setFetchPct(polish, 0);
+    }
+
+    private void setFetchPct(boolean polish, int pct) {
+        TextView tv = polish ? tvPolishFetchPct : tvFetchPct;
+        if (tv != null) tv.setText(Math.max(0, Math.min(100, pct)) + "%");
     }
 
     /** 读取模型列表，只留这一类里真能跑通的，再挂成下拉。 */
@@ -1785,12 +1862,12 @@ public class SettingsActivity extends AppCompatActivity {
         final String ep = endpoint;
         final String apiKey = key;
         btn.setEnabled(false);
-        btn.setProgress(1);
-        btn.setText("读取中 0%");
+        btn.setProgress(0);
+        btn.setText(R.string.settings_fetch_models);
         if (pb != null) {
-            pb.setVisibility(android.view.View.VISIBLE);
             pb.setProgress(0);
         }
+        setFetchProgressVisible(polish, true);
         Toast.makeText(this, R.string.models_fetching, Toast.LENGTH_SHORT).show();
         new Thread(() -> {
             String err = "";
@@ -1801,10 +1878,13 @@ public class SettingsActivity extends AppCompatActivity {
                 err = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
             }
             if (ids == null || ids.isEmpty()) {
+                logSettingsDiag("MODELS_EMPTY " + (polish ? "polish" : "asr")
+                        + " host=" + AsrConfig.hostOf(ep)
+                        + (err.isEmpty() ? "" : " " + err));
                 runOnUiThread(() -> {
                     btn.setEnabled(true);
                     btn.setProgress(0);
-                    if (pb != null) pb.setVisibility(android.view.View.GONE);
+                    setFetchProgressVisible(polish, false);
                     btn.setText(R.string.settings_fetch_models);
                     if (polish) {
                         polishResult(false, getString(R.string.models_none));
@@ -1833,7 +1913,7 @@ public class SettingsActivity extends AppCompatActivity {
                     runOnUiThread(() -> {
                         btn.setProgress(pct);
                         if (pb != null) pb.setProgress(pct);
-                        btn.setText("读取中 " + pct + "%");
+                        setFetchPct(polish, pct);
                     });
                 });
             }
@@ -1850,7 +1930,10 @@ public class SettingsActivity extends AppCompatActivity {
                 btn.setEnabled(true);
                 btn.setProgress(0);
                 btn.setText(R.string.settings_fetch_models);
+                setFetchProgressVisible(polish, false);
                 if (fIds.isEmpty()) {
+                    logSettingsDiag("MODELS_NO_USABLE " + (polish ? "polish" : "asr")
+                            + " host=" + AsrConfig.hostOf(ep) + " total=" + total);
                     if (polish) {
                         polishResult(false, getString(R.string.models_none));
                     } else {
@@ -2018,7 +2101,7 @@ public class SettingsActivity extends AppCompatActivity {
                 || low.contains("omni")) return false;
         boolean audio = low.contains("asr")
                 || low.contains("audio")
-                || low.contains("realtime")
+                || low.contains("realtime") || low.contains("streaming")
                 || low.contains("speech")
                 || low.contains("transcri")
                 || low.contains("whisper")
@@ -2078,7 +2161,7 @@ public class SettingsActivity extends AppCompatActivity {
     /** 语音模型拿内置的中英文语音真识别一次，转出文字才算可用。 */
     private boolean testAudioModel(String id, String ep, String key) {
         String low = id.toLowerCase(java.util.Locale.ROOT);
-        if (low.contains("realtime")) return testRealtimeModel(id, ep, key);
+        if (low.contains("realtime") || low.contains("streaming")) return testRealtimeModel(id, ep, key);
         if (AsrConfig.isZhipuEndpoint(ep)) return testZhipuAudio(id, ep, key);
 
         String data = "data:audio/wav;base64,"
@@ -2470,7 +2553,7 @@ public class SettingsActivity extends AppCompatActivity {
         tvKeyResult.setTextColor(color);
     }
 
-    /** 取 Key 的 MD5 前 8 位，用来判断输入框里的串和内置串是不是同一个。 */
+    /** 取 Key 的 MD5 前 8 位，用来判断输入框里的 Key 有没有变化。 */
     private String fp(String s) {
         try {
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");

@@ -301,7 +301,7 @@ public class BailianAsrEngine implements AsrEngine {
         if (code == 401) {
             String k = config.apiKey == null ? "" : config.apiKey;
             String tail = k.length() > 4 ? k.substring(k.length() - 4) : k;
-            return "Key 被拒（401）· 内置Key 长度" + k.length() + " 尾号" + tail + " · ";
+            return "Key 被拒（401）· Key 长度" + k.length() + " 尾号" + tail + " · ";
         }
         if (code == 403) return "Key 没有权限（403）：";
         if (code == 429) return "调用太频繁被限流（429），等一会儿再说：";
