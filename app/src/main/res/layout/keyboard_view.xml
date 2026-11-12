@@ -73,7 +73,7 @@
                 android:src="@drawable/ic_menu"
                 app:tint="@color/text_primary" />
 
-            <!-- 文字态显示 123，数字态显示麦克风，两张图叠在一个框里，居中对齐 -->
+            <!-- 模式键三态：语音显示 ABC，全键盘中文显示中，全键盘英文显示英 -->
             <FrameLayout
                 android:id="@+id/btn_mode"
                 android:layout_width="44dp"
@@ -171,17 +171,15 @@
             android:layout_height="match_parent"
             android:gravity="center_vertical|end"
             android:orientation="horizontal">
-        <TextView
-            android:id="@+id/btn_full_lang"
+        <ImageButton
+            android:id="@+id/btn_delete_full"
             android:layout_width="46dp"
             android:layout_height="44dp"
             android:layout_marginStart="3dp"
             android:background="@drawable/bg_btn"
-            android:gravity="center"
-            android:includeFontPadding="false"
-            android:text="中"
-            android:textColor="@color/text_primary"
-            android:textSize="15sp"
+            android:contentDescription="@string/btn_delete"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_backspace"
             android:visibility="gone" />
 
 

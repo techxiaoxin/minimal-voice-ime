@@ -80,7 +80,8 @@ public class MinimalVoiceIME extends InputMethodService {
     private static volatile boolean active = false;
 
     private View btnVoice;
-    private TextView btnFullLang;
+    /** 全键盘时顶替原中英切换键的删除键，和小键盘的删除键功能完全一样。 */
+    private ImageButton btnDeleteFull;
     private ImageButton btnDelete;
     private ImageButton btnSend;
     private ImageButton btnSettings;
@@ -128,6 +129,11 @@ public class MinimalVoiceIME extends InputMethodService {
     private int candBarH = 36;
     private LinearLayout llFullRows;
     private View flKeysRow;
+    /** 0 语音极简，1 全键盘中文，2 全键盘英文。模式键按这个顺序循环。 */
+    private int inputMode = 0;
+    private static final int MODE_VOICE = 0;
+    private static final int MODE_FULL_CN = 1;
+    private static final int MODE_FULL_EN = 2;
     private boolean fullMode = false;
     private PopupWindow keyPopup;
     private TextView keyPopupUpper;
@@ -222,17 +228,8 @@ public class MinimalVoiceIME extends InputMethodService {
         View root = inflater.inflate(R.layout.keyboard_view, null, false);
 
         btnVoice = root.findViewById(R.id.btn_voice);
-        btnFullLang = root.findViewById(R.id.btn_full_lang);
-        if (btnFullLang != null) {
-            btnFullLang.setOnClickListener(v -> {
-                pinyinMode = !pinyinMode;
-                shiftOn = false;
-                clearComposing();
-                rebuildFullRows();
-                refreshCand();
-                updateFullLangLabel();
-            });
-        }
+        // 全键盘里原来中英切换的位置，现在和小键盘一样当删除键用
+        btnDeleteFull = root.findViewById(R.id.btn_delete_full);
         btnDelete = root.findViewById(R.id.btn_delete);
         btnSend = root.findViewById(R.id.btn_send);
         btnSettings = root.findViewById(R.id.btn_settings);
@@ -261,6 +258,7 @@ public class MinimalVoiceIME extends InputMethodService {
         int iconTint = uiCtx.getColor(R.color.text_primary);
         btnSettings.setColorFilter(iconTint);
         btnDelete.setColorFilter(iconTint);
+        if (btnDeleteFull != null) btnDeleteFull.setColorFilter(iconTint);
         btnSend.setColorFilter(iconTint);
         ivMic.setColorFilter(iconTint);
         ivModeIcon.setColorFilter(iconTint);
@@ -291,8 +289,8 @@ public class MinimalVoiceIME extends InputMethodService {
         bindModeButton();
         tintNavigationBar();
 
-        // 重进键盘时保持 123 展开状态
-        applyModeState(fullMode);
+        // 重进键盘时保持当前的语音、中文全键盘或英文全键盘状态
+        applyInputMode(inputMode);
         refreshStatus(getString(R.string.voice_hint));
         inputRoot = root;
         return root;
@@ -500,14 +498,36 @@ public class MinimalVoiceIME extends InputMethodService {
         tvStatus.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, justDone ? 11 : 14);
         if (ivMic != null) ivMic.setVisibility(
                 (!justDone && "按住说话".equals(label) && !fullMode) ? View.VISIBLE : View.GONE);
-        if (btnFullLang != null) btnFullLang.setVisibility(fullMode ? View.VISIBLE : View.GONE);
+        if (btnDeleteFull != null) {
+            btnDeleteFull.setVisibility(fullMode ? View.VISIBLE : View.GONE);
+        }
         if (btnDelete != null) btnDelete.setVisibility(fullMode ? View.GONE : View.VISIBLE);
-        updateFullLangLabel();
+        updateModeButton();
     }
 
-    private void updateFullLangLabel() {
-        if (btnFullLang == null) return;
-        btnFullLang.setText(pinyinMode ? "中" : "英");
+    /** 模式键三态：语音显示 ABC，全键盘中文显示中，全键盘英文显示英。 */
+    private void updateModeButton() {
+        if (tvModeLabel == null) return;
+        tvModeLabel.setVisibility(View.VISIBLE);
+        String label;
+        String desc;
+        switch (inputMode) {
+            case MODE_FULL_CN:
+                label = "中";
+                desc = "切换到全键盘英文";
+                break;
+            case MODE_FULL_EN:
+                label = "英";
+                desc = "切换到语音输入";
+                break;
+            default:
+                label = "ABC";
+                desc = "切换到全键盘中文";
+                break;
+        }
+        if (!label.contentEquals(tvModeLabel.getText())) tvModeLabel.setText(label);
+        if (ivModeIcon != null) ivModeIcon.setVisibility(View.GONE);
+        if (btnMode != null) btnMode.setContentDescription(desc);
     }
 
     private Handler deleteHandler;
@@ -520,12 +540,19 @@ public class MinimalVoiceIME extends InputMethodService {
     }
 
     private void bindDeleteButton() {
+        // 小键盘和大全键盘的两个删除位共用同一套触摸节奏
+        bindRepeatDelete(btnDelete);
+        bindRepeatDelete(btnDeleteFull);
+    }
+
+    private void bindRepeatDelete(View v) {
+        if (v == null) return;
         // 用触摸事件自己控制节奏：按下删一个，按住 400ms 后每 60ms 删一个
-        btnDelete.setOnTouchListener((v, e) -> {
+        v.setOnTouchListener((view, e) -> {
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     deleteOneStep();
-                    v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                     startRepeatDelete();
                     return true;
                 case MotionEvent.ACTION_UP:
@@ -705,14 +732,11 @@ public class MinimalVoiceIME extends InputMethodService {
         });
     }
 
-    /**
-     * 展开快捷面板。输入法窗口高度跟着视图走，面板一显示窗口自己就长高，
-     * 不用像微博那样手动垫高度，也不用 PopupWindow，那个会被小窗口裁掉。
-     */
+    /** 展开快捷面板时先回语音态，和原来一样把全键盘收起来。 */
     private void showQuickPanel() {
         if (llQuick == null) return;
         numbersOpen = false;
-        applyModeState(false);
+        applyInputMode(MODE_VOICE);
         // 面板整条把三横杠那个键也包进来，看起来是一整块，不是飘在旁边的两块
         if (btnSettings != null) btnSettings.setVisibility(View.INVISIBLE);
         llQuick.setVisibility(View.VISIBLE);
@@ -746,35 +770,54 @@ public class MinimalVoiceIME extends InputMethodService {
         }
     }
 
-    /** 文字态显示 123，按下去进数字行；数字态显示麦克风，按下去回语音。 */
+    /** 模式键三态循环：语音极简 → 全键盘中文 → 全键盘英文 → 语音极简。 */
     private void bindModeButton() {
         btnMode.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-            boolean toFull = !fullMode;
-            if (toFull) clearComposing();
-            applyModeState(toFull);
-            applyPanelMode();
-            vibrate(10);
+            int next;
+            if (inputMode == MODE_VOICE) {
+                next = MODE_FULL_CN;
+            } else if (inputMode == MODE_FULL_CN) {
+                next = MODE_FULL_EN;
+            } else {
+                next = MODE_VOICE;
+            }
+            setInputMode(next);
         });
     }
 
-    private void applyModeState(boolean full) {
-        fullMode = full;
+    private void setInputMode(int mode) {
+        if (mode < MODE_VOICE || mode > MODE_FULL_EN) mode = MODE_VOICE;
+        if (mode == inputMode) return;
+        shiftOn = false;
+        applyInputMode(mode);
+        clearComposing();
+        rebuildFullRows();
+        applyPanelMode();
+        vibrate(10);
+    }
+
+    private void applyInputMode(int mode) {
+        if (mode < MODE_VOICE || mode > MODE_FULL_EN) mode = MODE_VOICE;
+        inputMode = mode;
+        fullMode = mode != MODE_VOICE;
+        pinyinMode = mode == MODE_FULL_CN;
         if (llNumbers != null) {
             llNumbers.setVisibility(View.GONE);
         }
         if (llFull != null) {
-            llFull.setVisibility(full ? View.VISIBLE : View.GONE);
+            llFull.setVisibility(fullMode ? View.VISIBLE : View.GONE);
         }
         if (flKeysRow != null) {
             flKeysRow.setVisibility(View.VISIBLE);
         }
-        if (tvModeLabel != null) {
-            tvModeLabel.setVisibility(full ? View.GONE : View.VISIBLE);
+        if (btnDeleteFull != null) {
+            btnDeleteFull.setVisibility(fullMode ? View.VISIBLE : View.GONE);
         }
-        if (ivModeIcon != null) {
-            ivModeIcon.setVisibility(full ? View.VISIBLE : View.GONE);
+        if (btnDelete != null) {
+            btnDelete.setVisibility(fullMode ? View.GONE : View.VISIBLE);
         }
+        updateModeButton();
         updateVoiceBar();
     }
 
@@ -927,14 +970,17 @@ public class MinimalVoiceIME extends InputMethodService {
         llFullRows.addView(row);
     }
 
-    /** 最后一排：左边大小写切换，中间 z 到 m，右边中英切换。退格和下面那条重复，不再放。 */
+    /** 最后一排：左边大小写切换，中间 z 到 m，右边删除。 */
     private void addLastRow() {
         LinearLayout row = newRow(50);
         View shift = mkKey(shiftOn ? "⇪" : "⇧", 1.1f, 15, false, null, () -> {
             shiftOn = !shiftOn;
-            if (shiftOn) pinyinMode = false;
+            // 中文拼音态按大小写，等于进英文态，模式键也跟着变英
+            if (shiftOn && inputMode == MODE_FULL_CN) {
+                applyInputMode(MODE_FULL_EN);
+                clearComposing();
+            }
             rebuildFullRows();
-            updateFullLangLabel();
         }, null);
         if (shiftOn) {
             TextView st = shift.findViewById(R.id.tv_key);
@@ -1191,11 +1237,10 @@ public class MinimalVoiceIME extends InputMethodService {
         } else if (upper != null && !upper.isEmpty()) {
             // 中文拼音状态下长大写，先切到英文，免得大写被拼进拼音串
             if (pinyinMode) {
-                pinyinMode = false;
+                applyInputMode(MODE_FULL_EN);
                 shiftOn = false;
                 clearComposing();
                 rebuildFullRows();
-                updateFullLangLabel();
             }
             onFullLetter(upper);
         }
