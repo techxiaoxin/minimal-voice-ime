@@ -127,6 +127,7 @@ public class MinimalVoiceIME extends InputMethodService {
     // 全键盘打字：默认中文拼音，点中英键切成英文直出
     private LinearLayout llFull;
     private LinearLayout llCandBar;
+    private LinearLayout llCandRow;
     private android.widget.HorizontalScrollView hsCand;
     private int candBarH = 36;
     private LinearLayout llFullRows;
@@ -945,7 +946,40 @@ public class MinimalVoiceIME extends InputMethodService {
         llCandBar.setPadding(dp(8), 0, dp(8), 0);
         hs.addView(llCandBar, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        llFull.addView(hs, new LinearLayout.LayoutParams(
+
+        // 候选条和右侧收起箭头共用同一行，箭头不额外占键盘高度
+        llCandRow = new LinearLayout(uiCtx);
+        llCandRow.setOrientation(LinearLayout.HORIZONTAL);
+        llCandRow.setGravity(Gravity.CENTER_VERTICAL);
+        llCandRow.setBackgroundColor(uiCtx.getColor(R.color.panel_bg));
+        llCandRow.addView(hs, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+
+        ImageView btnCollapse = new ImageView(uiCtx);
+        btnCollapse.setImageResource(R.drawable.ic_chevron);
+        btnCollapse.setRotation(180);
+        btnCollapse.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        btnCollapse.setPadding(dp(8), dp(8), dp(8), dp(8));
+        btnCollapse.setColorFilter(uiCtx.getColor(R.color.text_secondary));
+        btnCollapse.setContentDescription(getString(R.string.btn_collapse));
+        btnCollapse.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+            if (composing.length() > 0) {
+                if (!candList.isEmpty()) {
+                    commitCandidate(candList.get(0));
+                } else {
+                    InputConnection ic = getCurrentInputConnection();
+                    if (ic != null) ic.commitText(composing.toString(), 1);
+                    composing.setLength(0);
+                    candList.clear();
+                }
+            }
+            setInputMode(MODE_VOICE);
+        });
+        llCandRow.addView(btnCollapse, new LinearLayout.LayoutParams(
+                dp(34), ViewGroup.LayoutParams.MATCH_PARENT));
+
+        llFull.addView(llCandRow, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(36)));
 
         llFullRows = new LinearLayout(uiCtx);
@@ -1471,11 +1505,11 @@ public class MinimalVoiceIME extends InputMethodService {
 
     /** 词库候选要两行才铺得开，其他时候保持一条细条。 */
     private void setCandBarHeight(int hDp) {
-        if (hsCand == null || candBarH == hDp) return;
+        if (llCandRow == null || candBarH == hDp) return;
         candBarH = hDp;
-        android.view.ViewGroup.LayoutParams lp = hsCand.getLayoutParams();
+        android.view.ViewGroup.LayoutParams lp = llCandRow.getLayoutParams();
         lp.height = dp(hDp);
-        hsCand.setLayoutParams(lp);
+        llCandRow.setLayoutParams(lp);
     }
 
     private void commitEnPhrase(String cand) {

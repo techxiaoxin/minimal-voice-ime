@@ -1,8 +1,8 @@
 {
-  "versionCode": 152,
-  "versionName": "0.6.49",
-  "apkUrl": "https://gitee.com/techman68/minimal-voice-ime/releases/download/v0.6.49/minimal-voice-0.6.49-debug.apk",
-  "sha256": "e9c38ecd2ebce4147a04ac77fa090e090f2e24be38d366992aba2334dfccba5b",
-  "notes": "1. 全键盘改成微信输入法风格：白底圆角键帽、顶部独立数字行、按下有预览气泡、长按弹出横排三格卡片。\n2. Q 行上滑符号改成 % & * + = $ ^ _ [ ]，不再和顶部数字行重复。\n3. 长按三格卡片整体收小，左格大写、中间符号、右格小写都能选，手指滑到哪格就选哪格。\n4. 修复英文全键盘候选条字母只增不减：删除键会同步退掉候选条里的字母，发送后也会清空。\n5. 输入少于 10 个字符不触发 AI 整理；语音转写失败时中间大键变成“点一下重新转写”，单击用原录音重试。",
+  "versionCode": 153,
+  "versionName": "0.6.50",
+  "apkUrl": "https://gitee.com/techman68/minimal-voice-ime/releases/download/v0.6.50/minimal-voice-0.6.50-debug.apk",
+  "sha256": "8ce88e84c6e60f4d47dc751d787f4d1d9f217d06d6807a87a99a1365943c2e09",
+  "notes": "1. 全键盘中文支持首字母缩写：hd 出“好的”，hhh 出“哈哈哈”，nh 出“你好”，zd 出“知道”，xx 出“谢谢”。\n2. 词库按音节首字母建立缩写索引，常用缩写不再只认完整拼音。\n3. 增加输错键纠错：相邻键按错、相邻字母颠倒、zh/z、ch/c、sh/s、ang/an、eng/en、ing/in 等常见拼音混淆都会补纠错候选。\n4. 全键盘候选条右侧加收起箭头，和候选文字同一行，点击后先把第一候选上屏，再回到极简语音输入，不增加键盘高度。\n5. 缩写和纠错候选排在完整拼音候选后面，原有全拼、个人词库和快捷输入顺序不变。",
   "force": false
 }

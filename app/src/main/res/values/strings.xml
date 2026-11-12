@@ -12,6 +12,7 @@
     <string name="btn_settings">设置</string>
     <string name="btn_mode_num">ABC</string>
     <string name="btn_expand">展开表情区</string>
+    <string name="btn_collapse">收起键盘到语音输入</string>
     <string name="quick_switch_ime">切换输入法</string>
     <string name="quick_open_settings">设置</string>
 
