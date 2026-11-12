@@ -21,4 +21,5 @@
     <color name="chip_stroke">#D3DAE4</color>
     <color name="quick_bar_bg">#DCE4F2</color>
     <color name="quick_bar_stroke">#B9C6DA</color>
+    <color name="key_pressed_bg">#D9DEE6</color>
 </resources>

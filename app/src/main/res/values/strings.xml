@@ -23,6 +23,8 @@
     <string name="voice_tap_space_hold">单击空格 / 长按说话</string>
     <string name="voice_release">松开结束</string>
     <string name="voice_thinking">识别中…</string>
+    <string name="voice_retrying">重新转写中…</string>
+    <string name="voice_retry">点一下重新转写</string>
     <string name="voice_need_setup">先配置识别方式</string>
 
     <string name="action_enable_ime">启用输入法</string>
