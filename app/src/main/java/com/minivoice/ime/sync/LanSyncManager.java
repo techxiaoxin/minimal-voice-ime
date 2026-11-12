@@ -1,6 +1,7 @@
 package com.minivoice.ime.sync;
 
 import android.content.Context;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
@@ -126,6 +127,7 @@ public class LanSyncManager {
     private Thread serverThread;
     private volatile PeerCallback activeCallback;
     private volatile OfferCallback offerCallback;
+    private WifiManager.MulticastLock multicastLock;
 
     public void setOfferCallback(OfferCallback callback) {
         offerCallback = callback;
@@ -164,6 +166,7 @@ public class LanSyncManager {
         }
 
         discovering = true;
+        acquireMulticastLock(ctx);
         startDiscoveryLoop();
         startAnnounceLoop();
 
@@ -174,6 +177,7 @@ public class LanSyncManager {
         discovering = false;
         serving = false;
         activeCallback = null;
+        releaseMulticastLock();
 
         if (discoverySocket != null) {
             try {
@@ -207,6 +211,7 @@ public class LanSyncManager {
     private void finishDiscovery(PeerCallback callback) {
         if (!discovering) return;
         discovering = false;
+        releaseMulticastLock();
         if (discoverySocket != null) {
             try {
                 discoverySocket.close();
@@ -326,6 +331,29 @@ public class LanSyncManager {
                 : "{\"ok\":false" + (error == null ? "" : ",\"error\":\"" + error + "\"") + "}\n";
         out.write(json.getBytes(StandardCharsets.UTF_8));
         out.flush();
+    }
+
+    private void acquireMulticastLock(Context ctx) {
+        try {
+            WifiManager wm = (WifiManager) ctx.getApplicationContext()
+                    .getSystemService(Context.WIFI_SERVICE);
+            if (wm == null) return;
+            releaseMulticastLock();
+            multicastLock = wm.createMulticastLock("minivoice-lan-sync");
+            multicastLock.setReferenceCounted(false);
+            multicastLock.acquire();
+        } catch (Exception e) {
+            Log.w(TAG, "multicast lock failed: " + e.getMessage());
+        }
+    }
+
+    private void releaseMulticastLock() {
+        if (multicastLock == null) return;
+        try {
+            if (multicastLock.isHeld()) multicastLock.release();
+        } catch (Exception ignored) {
+        }
+        multicastLock = null;
     }
 
     private void startDiscoveryLoop() {

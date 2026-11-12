@@ -1,8 +1,8 @@
 {
-  "versionCode": 145,
-  "versionName": "0.6.42",
-  "apkUrl": "https://gitee.com/techman68/minimal-voice-ime/releases/download/v0.6.42/minimal-voice-0.6.42-debug.apk",
-  "sha256": "29db73d75522112e510bb5a00022b467bedd07e0c5c2b86ed416aa23c29652d1",
-  "notes": "1. 局域网同步改成双方各点一次，用 UDP 广播互相发现，发现窗口 12 秒，每秒一包，网络负担很小。\n2. 搜到设备后每行增加“发送”按钮，点开先勾选同步内容，选项默认收起，点箭头展开看具体参数，确定后才发送。\n3. 接收方会收到确认弹窗，点“接收”才覆盖本机对应项，点取消就不动；词库、快捷输入、识别设置、AI 整理设置、键盘外观按组同步。\n4. 发送端最多等 35 秒接收确认，避免对方还在看弹窗时发送方先报失败。\n5. 检查更新弹窗改成逐条列出更新内容，窗口按内容长度自动加高，说明太长时在弹窗内滚动，下载进度单独显示。",
+  "versionCode": 146,
+  "versionName": "0.6.43",
+  "apkUrl": "https://gitee.com/techman68/minimal-voice-ime/releases/download/v0.6.43/minimal-voice-0.6.43-debug.apk",
+  "sha256": "11693ba862f57f4765e20333ed958d67e999eb2098d919f0b1721288bad5e47c",
+  "notes": "1. 修复局域网同步点“局域网同步”没有反应的问题，同步卡片在“其他设置”页时也能正常开始扫描。\n2. 发现阶段增加 Wi-Fi 广播锁，减少部分路由器和手机系统过滤广播导致搜不到设备。\n3. 保留双方各点一次、12 秒发现、发送前勾选、接收方确认后覆盖的流程。",
   "force": false
 }

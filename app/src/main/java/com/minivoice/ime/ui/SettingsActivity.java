@@ -2690,7 +2690,6 @@ public class SettingsActivity extends AppCompatActivity {
 
 
     private void scan() {
-        if (!voicePage) return;
         peers.clear();
         llPeers.removeAllViews();
         tvPeers.setText("正在发现…最多 12 秒，两台手机都要点一下“局域网同步”");
