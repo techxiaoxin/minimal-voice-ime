@@ -2768,6 +2768,15 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
+    /** 快捷输入按“有没有缩写”统计，兼容旧数据里 type 为空的情况。 */
+    private int countQuickPhrases() {
+        int count = 0;
+        for (PhraseStore.Phrase p : PhraseStore.all(this)) {
+            if (p != null && p.code != null && !p.code.trim().isEmpty()) count++;
+        }
+        return count;
+    }
+
     /** 发送前先选内容，选项默认收起，点箭头才看具体会传哪些参数。 */
     private void showSendOptions(LanSyncManager.Peer peer) {
         Dialog d = new Dialog(this);
@@ -2792,8 +2801,8 @@ public class SettingsActivity extends AppCompatActivity {
         box.addView(sub);
 
         List<CheckBox> checks = new ArrayList<>();
-        int personal = PhraseStore.byType(this, PhraseStore.TYPE_PERSONAL).size();
-        int quick = PhraseStore.byType(this, PhraseStore.TYPE_QUICK).size();
+        int personal = Prefs.getWordList(this).size();
+        int quick = countQuickPhrases();
         checks.add(addSyncOption(box, Prefs.SYNC_GROUP_WORDS,
                 "个人词库与快捷输入",
                 "个人词库 " + personal + " 条，快捷输入 " + quick + " 条。",

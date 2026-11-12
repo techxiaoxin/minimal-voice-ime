@@ -1,8 +1,8 @@
 {
-  "versionCode": 146,
-  "versionName": "0.6.43",
-  "apkUrl": "https://gitee.com/techman68/minimal-voice-ime/releases/download/v0.6.43/minimal-voice-0.6.43-debug.apk",
-  "sha256": "11693ba862f57f4765e20333ed958d67e999eb2098d919f0b1721288bad5e47c",
-  "notes": "1. 修复局域网同步点“局域网同步”没有反应的问题，同步卡片在“其他设置”页时也能正常开始扫描。\n2. 发现阶段增加 Wi-Fi 广播锁，减少部分路由器和手机系统过滤广播导致搜不到设备。\n3. 保留双方各点一次、12 秒发现、发送前勾选、接收方确认后覆盖的流程。",
+  "versionCode": 147,
+  "versionName": "0.6.44",
+  "apkUrl": "https://gitee.com/techman68/minimal-voice-ime/releases/download/v0.6.44/minimal-voice-0.6.44-debug.apk",
+  "sha256": "a30bc17d62f4807b1d664b520f90b49dba4328c74b38e259f404cdc78ae8d002",
+  "notes": "1. 修复局域网同步发送选项里“个人词库 0 条、快捷输入 0 条”的统计错误。\n2. 个人词库改成按实际词表行数统计，不再去读空的个人词条。\n3. 快捷输入按所有带缩写的词条统计，兼容旧数据 type 为空的情况。",
   "force": false
 }
