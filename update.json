@@ -1,8 +1,8 @@
 {
-  "versionCode": 143,
-  "versionName": "0.6.40",
-  "apkUrl": "https://gitee.com/techman68/minimal-voice-ime/releases/download/v0.6.40/minimal-voice-0.6.40-debug.apk",
-  "sha256": "0659064edb5cd456e2f7ee4c17b9f14692becdb1e68400f1d8427cd737f5326a",
-  "notes": "0.6.40 在线更新验证版，功能和 0.6.39 一致，只把版本号加一，用来验证红点、下载、SHA-256 校验和系统安装全流程。",
+  "versionCode": 144,
+  "versionName": "0.6.41",
+  "apkUrl": "https://gitee.com/techman68/minimal-voice-ime/releases/download/v0.6.41/minimal-voice-0.6.41-debug.apk",
+  "sha256": "3a872976bb1d62cb38e89faa5fd677ce956ec795095af18586df9072078b8014",
+  "notes": "0.6.41：局域网同步改成双方各点一次，UDP 广播发现，12 秒窗口。搜到设备后点“发送”，勾选要同步的内容，点箭头展开看具体参数，确定发送后对方点“接收”才覆盖本机对应项。",
   "force": false
 }
