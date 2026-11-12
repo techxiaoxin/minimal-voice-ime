@@ -15,6 +15,7 @@ import android.util.Base64;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.ImageButton;
@@ -39,6 +40,7 @@ import com.minivoice.ime.asr.LocalAsrEngine;
 import com.minivoice.ime.asr.RealtimeAsrEngine;
 import com.minivoice.ime.asr.LocalLlmModel;
 import com.minivoice.ime.asr.LocalModelManager;
+import com.minivoice.ime.data.PhraseStore;
 import com.minivoice.ime.settings.Prefs;
 import com.minivoice.ime.sync.LanSyncManager;
 import com.minivoice.ime.update.UpdateManager;
@@ -48,8 +50,10 @@ import java.io.File;
 import java.net.Proxy;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.MediaType;
@@ -156,6 +160,7 @@ public class SettingsActivity extends AppCompatActivity {
 
     private final LanSyncManager lan = new LanSyncManager();
     private final List<LanSyncManager.Peer> peers = new ArrayList<>();
+    private boolean receiveDialogShowing;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -413,6 +418,13 @@ public class SettingsActivity extends AppCompatActivity {
         });
 
         btnScan.setOnClickListener(v -> scan());
+        lan.setOfferCallback((offer, decision) -> {
+            if (isFinishing() || isDestroyed()) {
+                decision.reject();
+                return;
+            }
+            showReceiveOffer(offer, decision);
+        });
         View runLog = findViewById(R.id.btn_run_log);
         if (runLog != null) runLog.setOnClickListener(v -> showAsrDiag());
 
@@ -454,10 +466,6 @@ public class SettingsActivity extends AppCompatActivity {
         }
         // 回到设置页先刷一次用量，识别和整理每次记账后这里都能看到新数字
         renderTokens();
-        String name = TextUtils.isEmpty(etDevice.getText())
-                ? android.os.Build.MODEL
-                : etDevice.getText().toString();
-        lan.startAdvertising(this, name);
     }
 
     @Override
@@ -872,6 +880,10 @@ public class SettingsActivity extends AppCompatActivity {
             row.addView(t);
         }
         return row;
+    }
+
+    private int dp(int v) {
+        return (int) (v * getResources().getDisplayMetrics().density + 0.5f);
     }
 
     private int dp2(float v) {
@@ -2681,10 +2693,13 @@ public class SettingsActivity extends AppCompatActivity {
         if (!voicePage) return;
         peers.clear();
         llPeers.removeAllViews();
-        tvPeers.setText("扫描中…，最多等 4 秒");
+        tvPeers.setText("正在发现…最多 12 秒，两台手机都要点一下“局域网同步”");
         Button btn = findViewById(R.id.btn_scan);
         btn.setEnabled(false);
-        lan.discover(this, new LanSyncManager.PeerCallback() {
+        String name = TextUtils.isEmpty(etDevice.getText())
+                ? android.os.Build.MODEL
+                : etDevice.getText().toString().trim();
+        lan.startSession(this, name, new LanSyncManager.PeerCallback() {
             @Override
             public void onResult(List<LanSyncManager.Peer> result) {
                 if (isFinishing() || isDestroyed()) return;
@@ -2692,10 +2707,10 @@ public class SettingsActivity extends AppCompatActivity {
                 peers.clear();
                 peers.addAll(result);
                 if (peers.isEmpty()) {
-                    tvPeers.setText("没扫到设备。两台手机要连同一个 WiFi，都打开过这个设置页。");
+                    tvPeers.setText("没扫到设备。确认两台手机连同一个 WiFi，都点了“局域网同步”，路由器没开 AP 隔离。");
                     llPeers.removeAllViews();
                 } else {
-                    tvPeers.setText("找到 " + peers.size() + " 台，点下面的设备把设置推过去");
+                    tvPeers.setText("找到 " + peers.size() + " 台，点右边的“发送”选择要同步的内容");
                     renderPeerList();
                 }
             }
@@ -2709,43 +2724,298 @@ public class SettingsActivity extends AppCompatActivity {
         });
     }
 
-    /** 扫到的设备一行一个，点了就推配置过去。 */
+    /** 扫到的设备一行一个，右边是发送按钮，不会点一下就直接覆盖对方。 */
     private void renderPeerList() {
         llPeers.removeAllViews();
         for (LanSyncManager.Peer p : peers) {
-            TextView row = new TextView(this);
-            row.setText(p.name + "\n" + p.host);
-            row.setTextSize(12);
-            row.setTextColor(getColor(R.color.text_primary));
-            row.setLineSpacing(2, 1f);
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
             row.setBackgroundResource(R.drawable.bg_input);
-            row.setPadding(dp(12), dp(9), dp(12), dp(9));
+            row.setPadding(dp(12), dp(9), dp(10), dp(9));
+
+            LinearLayout info = new LinearLayout(this);
+            info.setOrientation(LinearLayout.VERTICAL);
+            TextView name = new TextView(this);
+            name.setText(p.name == null ? "未命名设备" : p.name);
+            name.setTextSize(13);
+            name.setTextColor(getColor(R.color.text_primary));
+            name.setSingleLine(true);
+            name.setEllipsize(TextUtils.TruncateAt.END);
+            TextView host = new TextView(this);
+            host.setText(p.host);
+            host.setTextSize(11);
+            host.setTextColor(getColor(R.color.text_secondary));
+            host.setPadding(0, dp(2), 0, 0);
+            info.addView(name);
+            info.addView(host);
+            row.addView(info, new LinearLayout.LayoutParams(0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+            TextView send = mkChip("发送", true);
+            send.setTextSize(12);
+            LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(dp(64), dp(34));
+            slp.setMarginStart(dp(8));
+            send.setLayoutParams(slp);
+            send.setOnClickListener(v -> showSendOptions(p));
+            row.addView(send);
+
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT);
             lp.topMargin = dp(6);
             row.setLayoutParams(lp);
-            row.setOnClickListener(v -> confirmPush(p));
             llPeers.addView(row);
         }
     }
 
-    private void confirmPush(LanSyncManager.Peer p) {
-        showCardDialog("推送到 " + p.name,
-                "把接口、Key、模型、主题、词表这些设置推过去，对方的会合并。",
-                "取消", "推送", () -> push(p));
-    }
+    /** 发送前先选内容，选项默认收起，点箭头才看具体会传哪些参数。 */
+    private void showSendOptions(LanSyncManager.Peer peer) {
+        Dialog d = new Dialog(this);
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(18), dp(16), dp(18), dp(14));
+        box.setBackgroundResource(R.drawable.bg_card);
 
-    private int dp(int v) {
-        return (int) (v * getResources().getDisplayMetrics().density + 0.5f);
-    }
+        TextView head = new TextView(this);
+        head.setText("发送到 " + (peer.name == null ? "对方设备" : peer.name));
+        head.setTextSize(15);
+        head.setTextColor(getColor(R.color.text_primary));
+        head.setTypeface(null, android.graphics.Typeface.BOLD);
+        box.addView(head);
 
-    private void push(LanSyncManager.Peer peer) {
-        Map<String, String> payload = Prefs.exportSyncPayload(this);
-        lan.push(peer, payload, (ok, message) -> {
-            Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-            if (ok) Prefs.markPendingSync(this, false);
+        TextView sub = new TextView(this);
+        sub.setText("选择要同步的内容。点箭头看具体参数，确定后对方会收到接收提示。");
+        sub.setTextSize(12);
+        sub.setTextColor(getColor(R.color.text_secondary));
+        sub.setLineSpacing(dp(2), 1f);
+        sub.setPadding(0, dp(6), 0, dp(10));
+        box.addView(sub);
+
+        List<CheckBox> checks = new ArrayList<>();
+        int personal = PhraseStore.byType(this, PhraseStore.TYPE_PERSONAL).size();
+        int quick = PhraseStore.byType(this, PhraseStore.TYPE_QUICK).size();
+        checks.add(addSyncOption(box, Prefs.SYNC_GROUP_WORDS,
+                "个人词库与快捷输入",
+                "个人词库 " + personal + " 条，快捷输入 " + quick + " 条。",
+                "个人词库会整组覆盖，快捷输入也会整组覆盖。",
+                true));
+        checks.add(addSyncOption(box, Prefs.SYNC_GROUP_ASR,
+                "识别设置（含 API Key）",
+                "接口地址、API Key、识别模型、协议、语言、蓝牙麦克风、识别后整理开关。",
+                "会把本机正在用的识别配置整组覆盖过去。",
+                false));
+        checks.add(addSyncOption(box, Prefs.SYNC_GROUP_POLISH,
+                "AI 整理设置（含 Key 和提示词）",
+                "整理引擎、云端地址和 Key、整理模型、云端和本地提示词、本地模型档位。",
+                "会把本机的整理规则和模型设置整组覆盖过去。",
+                false));
+        checks.add(addSyncOption(box, Prefs.SYNC_GROUP_LOOK,
+                "键盘外观",
+                "深浅主题、空格键行为。",
+                "只改外观和空格键，不动词库和接口。",
+                false));
+
+        LinearLayout bottom = new LinearLayout(this);
+        bottom.setOrientation(LinearLayout.HORIZONTAL);
+        bottom.setGravity(android.view.Gravity.END);
+        TextView cancel = mkChip("取消", false);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, dp(36), 1f);
+        cancel.setLayoutParams(clp);
+        cancel.setOnClickListener(v -> d.dismiss());
+        bottom.addView(cancel);
+
+        TextView send = mkChip("确定发送", true);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, dp(36), 1f);
+        slp.setMarginStart(dp(8));
+        send.setLayoutParams(slp);
+        send.setEnabled(false);
+        send.setAlpha(0.45f);
+        bottom.addView(send);
+        box.addView(bottom, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        Runnable refreshSend = () -> {
+            boolean any = false;
+            for (CheckBox cb : checks) {
+                if (cb.isChecked()) {
+                    any = true;
+                    break;
+                }
+            }
+            send.setEnabled(any);
+            send.setAlpha(any ? 1f : 0.45f);
+        };
+        for (CheckBox cb : checks) {
+            cb.setOnCheckedChangeListener((buttonView, isChecked) -> refreshSend.run());
+        }
+        refreshSend.run();
+
+        send.setOnClickListener(v -> {
+            Set<String> groups = new LinkedHashSet<>();
+            for (CheckBox cb : checks) {
+                if (cb.isChecked()) groups.add(String.valueOf(cb.getTag()));
+            }
+            if (groups.isEmpty()) return;
+            Map<String, String> payload = Prefs.exportSyncPayload(this, groups);
+            d.dismiss();
+            Toast.makeText(this, "已发出同步请求，等对方点接收", Toast.LENGTH_SHORT).show();
+            lan.push(peer, payload, (ok, message) -> {
+                Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+                if (ok) Prefs.markPendingSync(this, false);
+            });
         });
+
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(box, new android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT));
+        d.setContentView(sv);
+        android.view.Window w = d.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(
+                    android.graphics.Color.TRANSPARENT));
+            w.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.90),
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+        d.show();
+    }
+
+    /** 一条可勾选的同步项，箭头控制下面的参数说明展开或收起。 */
+    private CheckBox addSyncOption(LinearLayout box, String group, String title,
+                                   String summary, String details, boolean checked) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(5), 0, dp(5));
+
+        CheckBox cb = new CheckBox(this);
+        cb.setText(title);
+        cb.setTextSize(13);
+        cb.setTextColor(getColor(R.color.text_primary));
+        cb.setTag(group);
+        cb.setChecked(checked);
+        cb.setButtonTintList(android.content.res.ColorStateList.valueOf(getColor(R.color.accent)));
+        row.addView(cb, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView arrow = new TextView(this);
+        arrow.setText("▸");
+        arrow.setTextSize(18);
+        arrow.setTextColor(getColor(R.color.text_secondary));
+        arrow.setGravity(android.view.Gravity.CENTER);
+        arrow.setLayoutParams(new LinearLayout.LayoutParams(dp(30), dp(34)));
+        row.addView(arrow);
+        box.addView(row);
+
+        TextView detail = new TextView(this);
+        detail.setText(summary + "\n" + details);
+        detail.setTextSize(11);
+        detail.setTextColor(getColor(R.color.text_secondary));
+        detail.setLineSpacing(dp(2), 1f);
+        detail.setPadding(dp(30), 0, dp(4), dp(8));
+        detail.setVisibility(android.view.View.GONE);
+        box.addView(detail);
+
+        arrow.setOnClickListener(v -> {
+            boolean show = detail.getVisibility() != android.view.View.VISIBLE;
+            detail.setVisibility(show ? android.view.View.VISIBLE : android.view.View.GONE);
+            arrow.setText(show ? "▾" : "▸");
+        });
+        return cb;
+    }
+
+    /** 对方发来同步请求时，本机显示接收确认，只有点接收才覆盖。 */
+    private void showReceiveOffer(LanSyncManager.Offer offer, LanSyncManager.DecisionCallback decision) {
+        if (receiveDialogShowing) {
+            decision.reject();
+            Toast.makeText(this, "正在处理另一个同步请求", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        receiveDialogShowing = true;
+
+        Dialog d = new Dialog(this);
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(18), dp(16), dp(18), dp(14));
+        box.setBackgroundResource(R.drawable.bg_card);
+
+        TextView head = new TextView(this);
+        head.setText((offer.sender == null ? "对方设备" : offer.sender) + " 想同步设置");
+        head.setTextSize(15);
+        head.setTextColor(getColor(R.color.text_primary));
+        head.setTypeface(null, android.graphics.Typeface.BOLD);
+        box.addView(head);
+
+        TextView body = new TextView(this);
+        StringBuilder labels = new StringBuilder();
+        if (offer.groups != null) {
+            for (String group : offer.groups) {
+                if (labels.length() > 0) labels.append("、");
+                labels.append(syncGroupLabel(group));
+            }
+        }
+        body.setText("对方勾选了：" + (labels.length() == 0 ? "未选择内容" : labels)
+                + "\n\n接收后会覆盖本机对应项，没勾的不会动。");
+        body.setTextSize(12);
+        body.setTextColor(getColor(R.color.text_secondary));
+        body.setLineSpacing(dp(2), 1f);
+        body.setPadding(0, dp(8), 0, dp(14));
+        box.addView(body);
+
+        LinearLayout bottom = new LinearLayout(this);
+        bottom.setOrientation(LinearLayout.HORIZONTAL);
+        bottom.setGravity(android.view.Gravity.END);
+        boolean[] answered = {false};
+
+        TextView cancel = mkChip("取消", false);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, dp(36), 1f);
+        cancel.setLayoutParams(clp);
+        cancel.setOnClickListener(v -> {
+            answered[0] = true;
+            decision.reject();
+            d.dismiss();
+        });
+        bottom.addView(cancel);
+
+        TextView accept = mkChip("接收", true);
+        LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(0, dp(36), 1f);
+        alp.setMarginStart(dp(8));
+        accept.setLayoutParams(alp);
+        accept.setOnClickListener(v -> {
+            answered[0] = true;
+            decision.accept();
+            d.dismiss();
+            Toast.makeText(this, "已接收 " + (offer.sender == null ? "对方" : offer.sender) + " 的设置",
+                    Toast.LENGTH_SHORT).show();
+            load();
+            renderTokens();
+        });
+        bottom.addView(accept);
+        box.addView(bottom);
+
+        d.setOnDismissListener(dialog -> {
+            if (!answered[0]) decision.reject();
+            receiveDialogShowing = false;
+        });
+        d.setContentView(box);
+        android.view.Window w = d.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(
+                    android.graphics.Color.TRANSPARENT));
+            w.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.86),
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+        d.show();
+    }
+
+    private String syncGroupLabel(String group) {
+        if (Prefs.SYNC_GROUP_WORDS.equals(group)) return "个人词库与快捷输入";
+        if (Prefs.SYNC_GROUP_ASR.equals(group)) return "识别设置";
+        if (Prefs.SYNC_GROUP_POLISH.equals(group)) return "AI 整理设置";
+        if (Prefs.SYNC_GROUP_LOOK.equals(group)) return "键盘外观";
+        return "其它设置";
     }
 
     // ---------------- 个人词库 / 快捷输入 ----------------

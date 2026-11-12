@@ -161,12 +161,12 @@
                 </LinearLayout>
 
                                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/bg_card" android:orientation="vertical" android:padding="12dp">
-                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="同一 WiFi 同步词库" android:textColor="@color/text_primary" android:textSize="13sp" android:layout_marginBottom="6dp" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="同一 WiFi 同步词库与设置" android:textColor="@color/text_primary" android:textSize="13sp" android:layout_marginBottom="6dp" />
                     <LinearLayout android:layout_width="match_parent" android:layout_height="42dp" android:gravity="center_vertical" android:orientation="horizontal">
                         <EditText android:id="@+id/et_device" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:background="@drawable/bg_input" android:hint="本机名称" android:importantForAutofill="no" android:inputType="text" android:paddingStart="10dp" android:paddingEnd="10dp" android:singleLine="true" android:textColor="@color/text_primary" android:textColorHint="@color/text_hint" android:textSize="12sp" />
                         <Button android:id="@+id/btn_scan" android:layout_width="wrap_content" android:minWidth="96dp" android:layout_height="match_parent" android:layout_marginStart="8dp" android:background="@drawable/bg_btn_secondary" android:paddingStart="12dp" android:paddingEnd="12dp" android:text="@string/settings_sync" android:textAllCaps="false" android:textColor="@color/text_primary" android:textSize="12sp" />
                     </LinearLayout>
-                    <TextView android:id="@+id/tv_peers" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:lineSpacingExtra="3dp" android:text="点右边按钮搜同一 WiFi 下的设备" android:textColor="@color/text_secondary" android:textSize="11sp" />
+                    <TextView android:id="@+id/tv_peers" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:lineSpacingExtra="3dp" android:text="两台手机都点一下“局域网同步”，最多等 12 秒" android:textColor="@color/text_secondary" android:textSize="11sp" />
                     <LinearLayout android:id="@+id/ll_peers" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:orientation="vertical" />
                 </LinearLayout>
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/bg_card" android:orientation="vertical" android:padding="12dp">

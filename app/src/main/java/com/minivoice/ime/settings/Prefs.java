@@ -6,10 +6,13 @@ import android.content.SharedPreferences;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
+import com.minivoice.ime.data.PhraseStore;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 全部偏好都放在本地 SharedPreferences，不上传任何公网服务器。
@@ -62,6 +65,12 @@ public final class Prefs {
     public static final String K_LOCAL_TIER = "local_model_tier";
     /** 主题：auto 跟随手机，light 白色，dark 黑色。 */
     public static final String K_THEME = "theme_mode";
+
+    /** 局域网同步的分组，发送端勾选，接收端按组覆盖。 */
+    public static final String SYNC_GROUP_WORDS = "words";
+    public static final String SYNC_GROUP_ASR = "asr";
+    public static final String SYNC_GROUP_POLISH = "polish";
+    public static final String SYNC_GROUP_LOOK = "look";
 
     private static final Gson GSON = new Gson();
 
@@ -268,20 +277,122 @@ public final class Prefs {
         putString(ctx, K_VOCAB, String.join("\n", words));
     }
 
-    public static Map<String, String> exportSyncPayload(Context ctx) {
+    /** 按勾选的分组导出。值统一转成字符串，方便走一行 JSON 的 TCP 传输。 */
+    public static Map<String, String> exportSyncPayload(Context ctx, Set<String> groups) {
         Map<String, String> map = new LinkedHashMap<>();
+        List<String> groupList = new ArrayList<>(groups);
+        map.put("__groups", GSON.toJson(groupList));
         map.put("device", getString(ctx, K_DEVICE_NAME, android.os.Build.MODEL));
-        map.put("vocab", GSON.toJson(getWordList(ctx)));
+
+        if (groups.contains(SYNC_GROUP_WORDS)) {
+            map.put("vocab", GSON.toJson(getWordList(ctx)));
+            map.put("phrases", GSON.toJson(PhraseStore.all(ctx)));
+        }
+        if (groups.contains(SYNC_GROUP_ASR)) {
+            putRaw(map, K_ENDPOINT, getString(ctx, K_ENDPOINT, ""));
+            putRaw(map, K_API_KEY, getString(ctx, K_API_KEY, ""));
+            putRaw(map, K_MODEL, getString(ctx, K_MODEL, ""));
+            putRaw(map, K_PROTOCOL, getString(ctx, K_PROTOCOL, ""));
+            putRaw(map, K_LANGUAGE, getString(ctx, K_LANGUAGE, "zh"));
+            putRaw(map, K_PREFER_BT, String.valueOf(getBool(ctx, K_PREFER_BT, false)));
+            putRaw(map, K_POLISH, String.valueOf(getBool(ctx, K_POLISH, true)));
+            putRaw(map, K_KEY_CLEARED, String.valueOf(getBool(ctx, K_KEY_CLEARED, false)));
+        }
+        if (groups.contains(SYNC_GROUP_POLISH)) {
+            putRaw(map, K_POLISH_ENGINE, getString(ctx, K_POLISH_ENGINE, "cloud"));
+            putRaw(map, K_POLISH_ENDPOINT, getString(ctx, K_POLISH_ENDPOINT, ""));
+            putRaw(map, K_POLISH_KEY, getString(ctx, K_POLISH_KEY, ""));
+            putRaw(map, K_POLISH_MODEL, getString(ctx, K_POLISH_MODEL, ""));
+            putRaw(map, K_PROMPT_CLOUD, getString(ctx, K_PROMPT_CLOUD, ""));
+            putRaw(map, K_PROMPT_LOCAL, getString(ctx, K_PROMPT_LOCAL, ""));
+            putRaw(map, K_LLM_URL, getString(ctx, K_LLM_URL, ""));
+            putRaw(map, K_LLM_TIER, getString(ctx, K_LLM_TIER, ""));
+            putRaw(map, K_LLM_CUSTOM_NAME, getString(ctx, K_LLM_CUSTOM_NAME, ""));
+            putRaw(map, K_LLM_CUSTOM_SIZE, String.valueOf(getLong(ctx, K_LLM_CUSTOM_SIZE, 0L)));
+        }
+        if (groups.contains(SYNC_GROUP_LOOK)) {
+            putRaw(map, K_THEME, getString(ctx, K_THEME, "auto"));
+            putRaw(map, K_SPACE_MODE, getString(ctx, K_SPACE_MODE, SPACE_SEND));
+        }
         return map;
     }
 
+    private static void putRaw(Map<String, String> map, String key, String value) {
+        map.put(key, value == null ? "" : value);
+    }
+
+    /** 接收端按对方勾选的分组覆盖本机对应项，没勾的组不动。 */
     public static void importSyncPayload(Context ctx, Map<String, String> map) {
         if (map == null) return;
-        String vocabJson = map.get("vocab");
-        if (vocabJson != null) {
-            List<String> words = GSON.fromJson(vocabJson, new TypeToken<List<String>>() {
-            }.getType());
-            if (words != null) setWordList(ctx, words);
+        List<String> groups = new ArrayList<>();
+        try {
+            String groupsJson = map.get("__groups");
+            if (groupsJson != null) {
+                groups = GSON.fromJson(groupsJson, new TypeToken<List<String>>() {
+                }.getType());
+            }
+        } catch (Exception ignored) {
+        }
+        if (groups == null) groups = new ArrayList<>();
+
+        if (groups.contains(SYNC_GROUP_WORDS)) {
+            String vocabJson = map.get("vocab");
+            if (vocabJson != null) {
+                List<String> words = GSON.fromJson(vocabJson, new TypeToken<List<String>>() {
+                }.getType());
+                if (words != null) setWordList(ctx, words);
+            }
+            String phrasesJson = map.get("phrases");
+            if (phrasesJson != null) {
+                List<PhraseStore.Phrase> phrases = GSON.fromJson(phrasesJson,
+                        new TypeToken<List<PhraseStore.Phrase>>() {
+                        }.getType());
+                if (phrases != null) PhraseStore.save(ctx, phrases);
+            }
+        }
+        if (groups.contains(SYNC_GROUP_ASR)) {
+            applyString(ctx, map, K_ENDPOINT);
+            applyString(ctx, map, K_API_KEY);
+            applyString(ctx, map, K_MODEL);
+            applyString(ctx, map, K_PROTOCOL);
+            applyString(ctx, map, K_LANGUAGE);
+            applyBool(ctx, map, K_PREFER_BT);
+            applyBool(ctx, map, K_POLISH);
+            applyBool(ctx, map, K_KEY_CLEARED);
+        }
+        if (groups.contains(SYNC_GROUP_POLISH)) {
+            applyString(ctx, map, K_POLISH_ENGINE);
+            applyString(ctx, map, K_POLISH_ENDPOINT);
+            applyString(ctx, map, K_POLISH_KEY);
+            applyString(ctx, map, K_POLISH_MODEL);
+            applyString(ctx, map, K_PROMPT_CLOUD);
+            applyString(ctx, map, K_PROMPT_LOCAL);
+            applyString(ctx, map, K_LLM_URL);
+            applyString(ctx, map, K_LLM_TIER);
+            applyString(ctx, map, K_LLM_CUSTOM_NAME);
+            applyLong(ctx, map, K_LLM_CUSTOM_SIZE);
+        }
+        if (groups.contains(SYNC_GROUP_LOOK)) {
+            applyString(ctx, map, K_THEME);
+            applyString(ctx, map, K_SPACE_MODE);
+        }
+    }
+
+    private static void applyString(Context ctx, Map<String, String> map, String key) {
+        if (!map.containsKey(key)) return;
+        putString(ctx, key, map.get(key));
+    }
+
+    private static void applyBool(Context ctx, Map<String, String> map, String key) {
+        if (!map.containsKey(key)) return;
+        putBool(ctx, key, Boolean.parseBoolean(map.get(key)));
+    }
+
+    private static void applyLong(Context ctx, Map<String, String> map, String key) {
+        if (!map.containsKey(key)) return;
+        try {
+            putLong(ctx, key, Long.parseLong(map.get(key)));
+        } catch (Exception ignored) {
         }
     }
 
