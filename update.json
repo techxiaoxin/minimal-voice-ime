@@ -2,7 +2,7 @@
   "versionCode": 144,
   "versionName": "0.6.41",
   "apkUrl": "https://gitee.com/techman68/minimal-voice-ime/releases/download/v0.6.41/minimal-voice-0.6.41-debug.apk",
-  "sha256": "3a872976bb1d62cb38e89faa5fd677ce956ec795095af18586df9072078b8014",
+  "sha256": "0b36f50bbfe11b32094e86bf69fcdc47a8c4d9810e79c22568c5322b9428f932",
   "notes": "0.6.41：局域网同步改成双方各点一次，UDP 广播发现，12 秒窗口。搜到设备后点“发送”，勾选要同步的内容，点箭头展开看具体参数，确定发送后对方点“接收”才覆盖本机对应项。",
   "force": false
 }

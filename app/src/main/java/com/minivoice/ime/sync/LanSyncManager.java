@@ -124,8 +124,8 @@ public class LanSyncManager {
     private Thread discoveryThread;
     private Thread announceThread;
     private Thread serverThread;
-    private PeerCallback activeCallback;
-    private OfferCallback offerCallback;
+    private volatile PeerCallback activeCallback;
+    private volatile OfferCallback offerCallback;
 
     public void setOfferCallback(OfferCallback callback) {
         offerCallback = callback;
@@ -467,12 +467,13 @@ public class LanSyncManager {
         return out;
     }
 
-    /** 把本机词库和快捷短语推到指定设备，对端收到后合并。 */
+    /** 把本机选中的设置推到指定设备，对端确认后覆盖对应项。 */
     public void push(Peer peer, Map<String, String> payload, PushCallback callback) {
         new Thread(() -> {
             try (Socket socket = new Socket()) {
                 socket.connect(new InetSocketAddress(peer.host, peer.port), 5000);
-                socket.setSoTimeout(5000);
+                // 对端可能停在接收确认弹窗上，最多等 30 秒，发送端要留出余量。
+                socket.setSoTimeout(35_000);
                 Map<String, String> body = new LinkedHashMap<>(payload);
                 body.put("__type", "offer");
                 body.put("__sender", deviceName);
