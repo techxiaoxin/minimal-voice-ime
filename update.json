@@ -1,8 +1,8 @@
 {
-  "versionCode": 144,
-  "versionName": "0.6.41",
-  "apkUrl": "https://gitee.com/techman68/minimal-voice-ime/releases/download/v0.6.41/minimal-voice-0.6.41-debug.apk",
-  "sha256": "0b36f50bbfe11b32094e86bf69fcdc47a8c4d9810e79c22568c5322b9428f932",
-  "notes": "0.6.41：局域网同步改成双方各点一次，UDP 广播发现，12 秒窗口。搜到设备后点“发送”，勾选要同步的内容，点箭头展开看具体参数，确定发送后对方点“接收”才覆盖本机对应项。",
+  "versionCode": 145,
+  "versionName": "0.6.42",
+  "apkUrl": "https://gitee.com/techman68/minimal-voice-ime/releases/download/v0.6.42/minimal-voice-0.6.42-debug.apk",
+  "sha256": "29db73d75522112e510bb5a00022b467bedd07e0c5c2b86ed416aa23c29652d1",
+  "notes": "1. 局域网同步改成双方各点一次，用 UDP 广播互相发现，发现窗口 12 秒，每秒一包，网络负担很小。\n2. 搜到设备后每行增加“发送”按钮，点开先勾选同步内容，选项默认收起，点箭头展开看具体参数，确定后才发送。\n3. 接收方会收到确认弹窗，点“接收”才覆盖本机对应项，点取消就不动；词库、快捷输入、识别设置、AI 整理设置、键盘外观按组同步。\n4. 发送端最多等 35 秒接收确认，避免对方还在看弹窗时发送方先报失败。\n5. 检查更新弹窗改成逐条列出更新内容，窗口按内容长度自动加高，说明太长时在弹窗内滚动，下载进度单独显示。",
   "force": false
 }

@@ -3154,14 +3154,38 @@ public class SettingsActivity extends AppCompatActivity {
         box.addView(head);
 
         TextView body = new TextView(this);
-        String notes = TextUtils.isEmpty(info.notes) ? "包含一些界面和稳定性改进。" : info.notes;
-        body.setText("当前版本 " + UpdateManager.versionLabel(this)
-                + "\n\n" + notes);
+        body.setText("当前版本 " + UpdateManager.versionLabel(this));
         body.setTextSize(12);
         body.setTextColor(getColor(R.color.text_secondary));
         body.setLineSpacing(dp(2), 1f);
-        body.setPadding(0, dp(8), 0, dp(10));
+        body.setPadding(0, dp(4), 0, dp(8));
         box.addView(body);
+
+        TextView section = new TextView(this);
+        section.setText("本次更新");
+        section.setTextSize(13);
+        section.setTextColor(getColor(R.color.text_primary));
+        section.setTypeface(null, android.graphics.Typeface.BOLD);
+        section.setPadding(0, dp(2), 0, dp(2));
+        box.addView(section);
+
+        TextView notesText = new TextView(this);
+        String notes = TextUtils.isEmpty(info.notes) ? "包含一些界面和稳定性改进。" : info.notes;
+        notesText.setText(notes);
+        notesText.setTextSize(12);
+        notesText.setTextColor(getColor(R.color.text_secondary));
+        notesText.setLineSpacing(dp(4), 1f);
+        notesText.setPadding(0, dp(6), 0, dp(6));
+        android.widget.ScrollView notesScroll = new android.widget.ScrollView(this);
+        notesScroll.setFillViewport(false);
+        notesScroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        notesScroll.addView(notesText, new android.widget.ScrollView.LayoutParams(
+                android.widget.ScrollView.LayoutParams.MATCH_PARENT,
+                android.widget.ScrollView.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(132));
+        nlp.bottomMargin = dp(8);
+        box.addView(notesScroll, nlp);
 
         ProgressBar bar = new ProgressBar(this, null,
                 android.R.attr.progressBarStyleHorizontal);
@@ -3176,6 +3200,14 @@ public class SettingsActivity extends AppCompatActivity {
         barLp.bottomMargin = dp(10);
         bar.setLayoutParams(barLp);
         box.addView(bar);
+
+        TextView status = new TextView(this);
+        status.setTextSize(12);
+        status.setTextColor(getColor(R.color.text_secondary));
+        status.setLineSpacing(dp(2), 1f);
+        status.setVisibility(View.GONE);
+        status.setPadding(0, 0, 0, dp(6));
+        box.addView(status);
 
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -3204,16 +3236,17 @@ public class SettingsActivity extends AppCompatActivity {
             v.setAlpha(0.55f);
             action.setText("下载中…");
             bar.setVisibility(View.VISIBLE);
-            body.setText("正在下载 v" + info.versionName + "，请保持网络连接。");
+            status.setVisibility(View.VISIBLE);
+            status.setText("正在下载 v" + info.versionName + "，请保持网络连接。");
             UpdateManager.download(this, info, new UpdateManager.DownloadCallback() {
                 @Override
                 public void onProgress(int percent, long downloaded, long total) {
                     if (!d.isShowing()) return;
                     bar.setProgress(percent >= 0 ? percent : 0);
                     if (percent >= 0) {
-                        body.setText("正在下载 v" + info.versionName + "  " + percent + "%");
+                        status.setText("正在下载 v" + info.versionName + "  " + percent + "%");
                     } else {
-                        body.setText("正在下载 v" + info.versionName + "…");
+                        status.setText("正在下载 v" + info.versionName + "…");
                     }
                 }
 
@@ -3231,7 +3264,8 @@ public class SettingsActivity extends AppCompatActivity {
                         }
                     } else {
                         pendingInstallFile = apk;
-                        body.setText("下载完成。请在系统设置里允许“安装未知应用”，返回后会自动继续安装。");
+                        status.setVisibility(View.VISIBLE);
+                        status.setText("下载完成。请在系统设置里允许“安装未知应用”，返回后会自动继续安装。");
                         d.dismiss();
                         UpdateManager.requestInstallPermission(SettingsActivity.this);
                     }
@@ -3241,7 +3275,8 @@ public class SettingsActivity extends AppCompatActivity {
                 public void onError(String message) {
                     if (!d.isShowing()) return;
                     bar.setVisibility(View.GONE);
-                    body.setText(message);
+                    status.setVisibility(View.VISIBLE);
+                    status.setText(message);
                     action.setEnabled(true);
                     action.setAlpha(1f);
                     action.setText("重新下载");
@@ -3253,9 +3288,21 @@ public class SettingsActivity extends AppCompatActivity {
         android.view.Window w = d.getWindow();
         if (w != null) {
             w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
-            w.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.86),
+            w.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.90),
                     android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
         }
+        d.setOnShowListener(dialog -> {
+            int width = (int) (getResources().getDisplayMetrics().widthPixels * 0.90) - dp(36);
+            notesText.measure(android.view.View.MeasureSpec.makeMeasureSpec(
+                    Math.max(1, width), android.view.View.MeasureSpec.AT_MOST),
+                    android.view.View.MeasureSpec.makeMeasureSpec(0,
+                            android.view.View.MeasureSpec.UNSPECIFIED));
+            int max = (int) (getResources().getDisplayMetrics().heightPixels * 0.48f);
+            int target = Math.min(Math.max(notesText.getMeasuredHeight() + dp(6), dp(132)), max);
+            android.view.ViewGroup.LayoutParams lp = notesScroll.getLayoutParams();
+            lp.height = target;
+            notesScroll.setLayoutParams(lp);
+        });
         d.show();
     }
 

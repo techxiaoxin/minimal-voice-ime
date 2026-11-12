@@ -12,6 +12,7 @@ import android.provider.Settings;
 
 import androidx.core.content.FileProvider;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
@@ -120,7 +121,20 @@ public final class UpdateManager {
                     info.versionName = o.optString("versionName", "");
                     info.apkUrl = o.optString("apkUrl", "");
                     info.sha256 = o.optString("sha256", "");
-                    info.notes = o.optString("notes", "");
+                    Object notesRaw = o.opt("notes");
+                    if (notesRaw instanceof JSONArray) {
+                        JSONArray arr = (JSONArray) notesRaw;
+                        StringBuilder sb = new StringBuilder();
+                        for (int i = 0; i < arr.length(); i++) {
+                            String item = arr.optString(i, "").trim();
+                            if (item.isEmpty()) continue;
+                            if (sb.length() > 0) sb.append('\n');
+                            sb.append(item);
+                        }
+                        info.notes = sb.toString();
+                    } else {
+                        info.notes = o.optString("notes", "");
+                    }
                     info.force = o.optBoolean("force", false);
                     if (info.versionCode <= 0 || info.apkUrl.isEmpty()) {
                         MAIN.post(() -> callback.onResult(null, "更新信息不完整"));
