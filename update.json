@@ -1,8 +1,8 @@
 {
-  "versionCode": 142,
-  "versionName": "0.6.39",
-  "apkUrl": "https://gitee.com/techman68/minimal-voice-ime/releases/download/v0.6.39/minimal-voice-0.6.39-debug.apk",
-  "sha256": "88d8e8865a994f1c65673c86fd02f6ce95ff3b224835e1b7adf5ca35ecdc249c",
-  "notes": "1. 有新版本时，版本号和“检查更新”文字前都会显示小红点。\n2. 语音识别阶段改成按键边缘细圆环跑马灯，整理阶段保持整条彩色渐变滚动。",
+  "versionCode": 143,
+  "versionName": "0.6.40",
+  "apkUrl": "https://gitee.com/techman68/minimal-voice-ime/releases/download/v0.6.40/minimal-voice-0.6.40-debug.apk",
+  "sha256": "0659064edb5cd456e2f7ee4c17b9f14692becdb1e68400f1d8427cd737f5326a",
+  "notes": "0.6.40 在线更新验证版，功能和 0.6.39 一致，只把版本号加一，用来验证红点、下载、SHA-256 校验和系统安装全流程。",
   "force": false
 }
