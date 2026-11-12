@@ -35,7 +35,9 @@ public class ProgressRingView extends View {
     private float stroke;
     private float cornerRadius;
     private float percentPadding;
+    private float density;
     private boolean indeterminate;
+    private boolean showPercent = true;
     private ValueAnimator progressAnimator;
     private ValueAnimator spinAnimator;
 
@@ -58,7 +60,7 @@ public class ProgressRingView extends View {
         setWillNotDraw(false);
         setClickable(false);
         setFocusable(false);
-        float density = context.getResources().getDisplayMetrics().density;
+        density = context.getResources().getDisplayMetrics().density;
         stroke = 4f * density;
         cornerRadius = 14f * density;
         percentPadding = 10f * density;
@@ -86,6 +88,22 @@ public class ProgressRingView extends View {
             setVisibility(GONE);
             cancelAnimators();
         }
+    }
+
+    /** 语音条上的识别圆环要更细，圆角也要跟语音条一样。 */
+    public void setRingStyle(float strokeDp, float cornerDp) {
+        stroke = strokeDp * density;
+        cornerRadius = cornerDp * density;
+        track.setStrokeWidth(stroke);
+        bar.setStrokeWidth(stroke);
+        if (getWidth() > 0 && getHeight() > 0) buildPath();
+        invalidate();
+    }
+
+    /** 语音条只画一圈弧线，不显示百分比。 */
+    public void setShowPercent(boolean show) {
+        showPercent = show;
+        invalidate();
     }
 
     /** 读取刚开始、还不知道百分比时，先让一段蓝色弧线绕按钮转圈。 */
@@ -213,6 +231,7 @@ public class ProgressRingView extends View {
             measure.getSegment(0f, len * shownProgress / 100f, barPath, true);
         }
         canvas.drawPath(barPath, bar);
+        if (!showPercent) return;
         String pct = Math.round(shownProgress) + "%";
         float baseline = getHeight() / 2f
                 - (percentPaint.ascent() + percentPaint.descent()) / 2f;

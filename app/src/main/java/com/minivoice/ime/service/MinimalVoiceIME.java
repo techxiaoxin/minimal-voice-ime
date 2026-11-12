@@ -25,6 +25,7 @@ import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import com.minivoice.ime.ui.MarqueeDrawable;
+import com.minivoice.ime.ui.ProgressRingView;
 import com.minivoice.ime.ui.WaveformDrawable;
 
 import android.view.View;
@@ -91,6 +92,7 @@ public class MinimalVoiceIME extends InputMethodService {
     private ImageView ivMic;
     private LinearLayout llNumbers;
     private ProgressBar pbInline;
+    private ProgressRingView ringVoice;
     /** 点设置键展开的快捷面板，里面是换输入法和进设置两条。 */
     private LinearLayout llQuick;
     private ImageButton btnQuickMenu;
@@ -248,6 +250,11 @@ public class MinimalVoiceIME extends InputMethodService {
         ivMic = btnVoice.findViewById(R.id.iv_mic);
         tvSwipeHint = root.findViewById(R.id.tv_swipe_hint);
         pbInline = btnVoice.findViewById(R.id.pb_inline);
+        ringVoice = root.findViewById(R.id.ring_voice);
+        if (ringVoice != null) {
+            ringVoice.setRingStyle(3f, 26f);
+            ringVoice.setShowPercent(false);
+        }
 
         // 图标本身是白的，键盘不是用 AppCompat 的 inflater 建的，app:tint 不生效，
         // 所以按主题在代码里上色，浅色主题下才不会白图标配白底。
@@ -1808,15 +1815,28 @@ public class MinimalVoiceIME extends InputMethodService {
         });
     }
 
+    /** 识别时在语音条边缘跑一圈细弧线，整理时收掉，换成整条渐变跑马灯。 */
+    private void showVoiceRing(boolean on) {
+        if (ringVoice == null) return;
+        if (on) {
+            ringVoice.setIndeterminate(false);
+            ringVoice.setRingVisible(true);
+            ringVoice.setIndeterminate(true);
+        } else {
+            ringVoice.setIndeterminate(false);
+            ringVoice.setRingVisible(false);
+        }
+    }
+
     /** 识别和整理期间，语音条里的麦克风换成转圈，完事再换回来。 */
     private void showBusy(boolean on) {
         main.post(() -> {
-            if (pbInline != null) {
-                pbInline.setVisibility(on ? View.VISIBLE : View.GONE);
-            }
+            // 识别阶段统一用语音条边缘的细圆环，不再显示条内横向进度
+            if (pbInline != null) pbInline.setVisibility(View.GONE);
             if (ivMic != null) {
                 ivMic.setVisibility(on ? View.GONE : View.VISIBLE);
             }
+            showVoiceRing(on);
             if (!on) stopPolishProgress();
         });
     }
@@ -1825,6 +1845,8 @@ public class MinimalVoiceIME extends InputMethodService {
     private void startPolishProgress() {
         main.post(() -> {
             if (btnVoice == null) return;
+            showVoiceRing(false);
+            if (pbInline != null) pbInline.setVisibility(View.GONE);
             android.content.Context c = uiCtx != null ? uiCtx : MinimalVoiceIME.this;
             MarqueeDrawable md = new MarqueeDrawable(c, 26 * getResources().getDisplayMetrics().density);
             md.reshuffle();
@@ -1847,6 +1869,7 @@ public class MinimalVoiceIME extends InputMethodService {
         }
         main.post(() -> {
             if (btnVoice == null) return;
+            showVoiceRing(false);
             btnVoice.setBackgroundResource(R.drawable.bg_voice_bar);
             if (ivMic != null) ivMic.setVisibility(View.VISIBLE);
             if (tvStatus != null) tvStatus.setVisibility(View.VISIBLE);
@@ -1876,6 +1899,7 @@ public class MinimalVoiceIME extends InputMethodService {
         main.post(() -> {
             if (btnVoice == null) return;
             if (on) {
+                showVoiceRing(false);
                 // 录音时是红底加白色波形，文字和麦克风都藏起来
                 android.content.Context c = uiCtx != null ? uiCtx : MinimalVoiceIME.this;
                 WaveformDrawable wd = new WaveformDrawable(c, 26 * getResources().getDisplayMetrics().density);
@@ -1889,6 +1913,7 @@ public class MinimalVoiceIME extends InputMethodService {
                 waveAnim.addUpdateListener(a -> wd.setPhase((float) a.getAnimatedValue()));
                 waveAnim.start();
             } else {
+                showVoiceRing(false);
                 if (waveAnim != null) {
                     waveAnim.cancel();
                     waveAnim = null;

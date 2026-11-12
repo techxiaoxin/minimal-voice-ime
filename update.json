@@ -1,8 +1,8 @@
 {
-  "versionCode": 141,
-  "versionName": "0.6.38",
-  "apkUrl": "https://gitee.com/techman68/minimal-voice-ime/releases/download/v0.6.38/minimal-voice-0.6.38-debug.apk",
-  "sha256": "e068ad7b42cc60b554aa7ac7ab446b814e4580a19aa2b17ad0cb5329d5753c2f",
-  "notes": "1. 设置页版本号支持检查更新，有新版本时显示红点，点开可以看更新说明、下载并安装。\n2. 长语音松开后先收起红色波形，再显示横向进度条，转写完成后再进入后续动效。",
+  "versionCode": 142,
+  "versionName": "0.6.39",
+  "apkUrl": "https://gitee.com/techman68/minimal-voice-ime/releases/download/v0.6.39/minimal-voice-0.6.39-debug.apk",
+  "sha256": "88d8e8865a994f1c65673c86fd02f6ce95ff3b224835e1b7adf5ca35ecdc249c",
+  "notes": "1. 有新版本时，版本号和“检查更新”文字前都会显示小红点。\n2. 语音识别阶段改成按键边缘细圆环跑马灯，整理阶段保持整条彩色渐变滚动。",
   "force": false
 }
