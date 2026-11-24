@@ -228,13 +228,13 @@
             android:textColor="#FFFFFFFF"
             android:textSize="11sp"
             android:visibility="invisible" />
-        <!-- 点三横杠后展开的两个小键，直接盖在 123 和语音键的上面 -->
+        <!-- 点三横杠后从原位横向滑出的小键，顶边和主按键对齐，不上下挪动 -->
         <LinearLayout
             android:id="@+id/ll_quick"
             android:layout_width="wrap_content"
-            android:layout_height="46dp"
-            android:layout_gravity="center_vertical|start"
-            android:layout_marginStart="6dp"
+            android:layout_height="40dp"
+            android:layout_gravity="top|start"
+            android:layout_marginStart="3dp"
             android:background="@drawable/bg_quick_bar"
             android:gravity="center_vertical"
             android:paddingStart="4dp"
@@ -249,7 +249,7 @@
                 android:background="@drawable/bg_btn"
                 android:contentDescription="@string/btn_settings"
                 android:scaleType="centerInside"
-                android:src="@drawable/ic_menu"
+                android:src="@drawable/ic_close"
                 app:tint="@color/text_primary" />
 
             <ImageButton

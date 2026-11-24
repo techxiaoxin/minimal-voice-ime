@@ -61,6 +61,7 @@ import com.minivoice.ime.asr.LocalLlmModel;
 import com.minivoice.ime.asr.LlmPolisher;
 import com.minivoice.ime.asr.LocalModelManager;
 import com.minivoice.ime.asr.RealtimeAsrEngine;
+import com.minivoice.ime.asr.DigitNormalizer;
 import com.minivoice.ime.asr.TermFix;
 import com.minivoice.ime.asr.TextNormalizer;
 import com.minivoice.ime.asr.TextPolisher;
@@ -818,22 +819,44 @@ public class MinimalVoiceIME extends InputMethodService {
         });
     }
 
-    /** 展开快捷面板时先回语音态，和原来一样把全键盘收起来。 */
+    /** 展开快捷面板时先回语音态，和原来一样把全键盘收起来。面板从菜单键原位横向滑出，垂直位置不动。 */
     private void showQuickPanel() {
         if (llQuick == null) return;
         numbersOpen = false;
         applyInputMode(MODE_VOICE);
-        // 面板整条把三横杠那个键也包进来，看起来是一整块，不是飘在旁边的两块
-        if (btnSettings != null) btnSettings.setVisibility(View.INVISIBLE);
+        if (btnSettings != null) btnSettings.setImageResource(R.drawable.ic_close);
         llQuick.setVisibility(View.VISIBLE);
         llQuick.bringToFront();
+        llQuick.setAlpha(0f);
+        // 先挂上布局拿到面板宽度，再从左侧原位滑入，主按键行的位置和间距完全不动
+        llQuick.post(() -> {
+            int w = llQuick.getWidth();
+            llQuick.setTranslationX(-(w > 0 ? w : dp(96)));
+            llQuick.animate().cancel();
+            llQuick.animate().alpha(1f).translationX(0f)
+                    .setDuration(180)
+                    .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                    .start();
+        });
     }
 
     private void hideQuickPanel() {
-        if (llQuick != null && llQuick.getVisibility() != View.GONE) {
-            llQuick.setVisibility(View.GONE);
+        if (btnSettings != null) btnSettings.setImageResource(R.drawable.ic_menu);
+        if (llQuick == null) {
+            dismissClipPopup();
+            return;
         }
-        if (btnSettings != null) btnSettings.setVisibility(View.VISIBLE);
+        if (llQuick.getVisibility() == View.GONE) {
+            dismissClipPopup();
+            return;
+        }
+        llQuick.animate().cancel();
+        llQuick.animate().alpha(0f)
+                .translationX(-(llQuick.getWidth() > 0 ? llQuick.getWidth() : dp(96)))
+                .setDuration(150)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                .withEndAction(() -> llQuick.setVisibility(View.GONE))
+                .start();
         dismissClipPopup();
     }
 
@@ -2190,8 +2213,8 @@ public class MinimalVoiceIME extends InputMethodService {
                     markVoiceFailure("没听清", true);
                     return;
                 }
-                // 本地模型偶尔吐繁体字，这里统一压成简体
-                final String raw = TextNormalizer.toSimplified(clean(text));
+                // 本地模型偶尔吐繁体字，这里统一压成简体；中文数字顺手规整成阿拉伯数字
+                final String raw = DigitNormalizer.toArabic(TextNormalizer.toSimplified(clean(text)));
 
                 // 流式识别时输入框里已经挂着一段 composing 文本，
                 // 这里先把它替换成完整稿，整理完再替换一次，不会重复上屏。
