@@ -53,10 +53,10 @@
         android:layout_height="match_parent"
         android:gravity="top"
         android:orientation="horizontal"
-        android:paddingStart="6dp"
-        android:paddingEnd="6dp">
+        android:paddingStart="3dp"
+        android:paddingEnd="3dp">
 
-        <!-- 中间语音键占 40%，左右四个侧键平分剩余空间，间隙统一 3dp -->
+        <!-- 中间语音键占 40%，左右四个侧键平分剩余空间，间隙统一 2dp -->
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
@@ -81,7 +81,7 @@
                 android:layout_width="0dp"
                 android:layout_height="40dp"
                 android:layout_weight="1"
-                android:layout_marginStart="3dp"
+                android:layout_marginStart="2dp"
                 android:background="@drawable/bg_btn">
 
                 <TextView
@@ -112,8 +112,8 @@
         <FrameLayout
             android:layout_width="0dp"
             android:layout_height="40dp"
-            android:layout_marginStart="3dp"
-            android:layout_marginEnd="3dp"
+            android:layout_marginStart="2dp"
+            android:layout_marginEnd="2dp"
             android:layout_weight="0.40">
 
         <LinearLayout
@@ -180,7 +180,7 @@
             android:layout_width="0dp"
             android:layout_height="40dp"
             android:layout_weight="1"
-            android:layout_marginStart="3dp"
+            android:layout_marginStart="2dp"
             android:background="@drawable/bg_btn"
             android:contentDescription="@string/btn_delete"
             android:scaleType="centerInside"
@@ -204,7 +204,7 @@
                 android:layout_width="0dp"
                 android:layout_height="40dp"
                 android:layout_weight="1"
-                android:layout_marginStart="3dp"
+                android:layout_marginStart="2dp"
                 android:background="@drawable/bg_btn"
                 android:contentDescription="@string/btn_send"
                 android:scaleType="centerInside"
@@ -254,7 +254,7 @@
 
             <ImageButton
                 android:id="@+id/btn_quick_ime"
-                android:layout_marginStart="3dp"
+                android:layout_marginStart="2dp"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
                 android:background="@drawable/bg_btn"
@@ -267,7 +267,7 @@
                 android:id="@+id/btn_quick_clip"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
-                android:layout_marginStart="3dp"
+                android:layout_marginStart="2dp"
                 android:background="@drawable/bg_btn"
                 android:contentDescription="@string/quick_open_clipboard"
                 android:scaleType="centerInside"
@@ -278,7 +278,7 @@
                 android:id="@+id/btn_quick_settings"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
-                android:layout_marginStart="3dp"
+                android:layout_marginStart="2dp"
                 android:background="@drawable/bg_btn"
                 android:contentDescription="@string/quick_open_settings"
                 android:scaleType="centerInside"

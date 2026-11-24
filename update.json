@@ -1,8 +1,8 @@
 {
-  "versionCode": 163,
-  "versionName": "0.6.60",
-  "apkUrl": "https://gitee.com/techman68/minimal-voice-ime/releases/download/v0.6.60/minimal-voice-0.6.60-debug.apk",
-  "sha256": "a795bb3293ccd8421a18139fe2ad9c082d60a62d03df2fd854f36b896d530373",
-  "notes": "1. 修复全键盘中文偶发候选词空白，候选计算加异常兜底，rime 初始化失败自动重试，就绪后自动补刷候选。\n2. 设置页左右翻页放宽斜向手势，左下、右下等带倾角的滑动也能切页，纯上下滚动仍优先。",
+  "versionCode": 164,
+  "versionName": "0.6.61",
+  "apkUrl": "https://gitee.com/techman68/minimal-voice-ime/releases/download/v0.6.61/minimal-voice-0.6.61-debug.apk",
+  "sha256": "bfce3aaf838afbf84a700be7100f84e5979f28d0a69edcc70eb06888332ed072",
+  "notes": "1. 收窄语音主栏按键间隙，外侧边距由 6dp 减到 3dp，按键之间间隙由 3dp 减到 2dp，快捷面板按键同步收窄，整体更贴边紧凑。",
   "force": false
 }
